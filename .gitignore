@@ -1,0 +1,7 @@
+node_modules
+target
+dist
+.DS_Store
+*.gguf
+.env
+app/src-tauri/target
