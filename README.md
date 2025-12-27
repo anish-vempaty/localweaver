@@ -39,6 +39,7 @@ LocalWeaver is a desktop application that bridges the gap between visual website
    cd app
    npm run tauri dev
    ```
+   > **Note:** The first time you run this command, it will take several minutes to compile the Rust backend. Subsequent runs will be much faster (hot reload).
 
 3. **Open a Project**:
    - Click "Browse" to select a folder containing HTML files (or an empty folder to start fresh).
