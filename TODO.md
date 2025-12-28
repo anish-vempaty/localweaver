@@ -3,9 +3,9 @@
 ## Future Support
 
 - [ ] **JavaScript Framework Support**: Add ability to parse and edit React, Vue, and Vite projects.
-    - Currently, LocalWeaver only supports static HTML/CSS files.
-    - Future integration would require parsing Route definitions (e.g., React Router) to build the graph.
-    - specialized editors for JSX/TSX components.
+  - Currently, LocalWeaver only supports static HTML/CSS files.
+  - Future integration would require parsing Route definitions (e.g., React Router) to build the graph.
+  - specialized editors for JSX/TSX components.
 
 ## Improvements
 

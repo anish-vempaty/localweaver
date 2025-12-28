@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import ReactFlow, {
     Node,
     Edge,
@@ -17,33 +17,68 @@ import { invoke } from '@tauri-apps/api/core';
 interface GraphEditorProps {
     projectPath: string;
     onNodeSelect: (nodeId: string) => void;
+    initialGraphData: { nodes: any[], edges: any[] };
+    onRefresh: () => void;
 }
 
-interface BackendGraph {
-    nodes: Node[];
-    edges: Edge[];
-}
-
-export default function GraphEditor({ projectPath, onNodeSelect }: GraphEditorProps) {
+export default function GraphEditor({ projectPath, onNodeSelect, initialGraphData, onRefresh }: GraphEditorProps) {
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
-    const loadGraph = useCallback(async () => {
-        try {
-            const graph = await invoke<BackendGraph>('scan_project', { path: projectPath });
-            console.log("Loaded graph:", graph);
-            setNodes(graph.nodes);
-            setEdges(graph.edges);
-        } catch (error) {
-            console.error("Failed to scan project:", error);
-        }
-    }, [projectPath, setNodes, setEdges]);
-
+    // Sync flow nodes when initialGraphData changes
     useEffect(() => {
-        if (projectPath) {
-            loadGraph();
-        }
-    }, [projectPath, loadGraph]);
+        if (!initialGraphData) return;
+
+        const graph = initialGraphData;
+        console.log("SYNCING GRAPH DATA:", graph); // DEBUG
+
+        // Map Backend Nodes to ReactFlow Nodes
+        const flowNodes: Node[] = graph.nodes.map((n: any) => ({
+            id: n.id,
+            type: 'default',
+            data: { label: n.data.label },
+            position: n.position,
+            style: {
+                background: n.id.endsWith('.html') ? '#fff' : '#f0f4ff',
+                border: '1px solid #777',
+                padding: 10,
+                borderRadius: 5,
+                width: 180,
+                fontSize: 12
+            },
+        }));
+
+        setNodes(flowNodes);
+
+        // Fuzzy Match Edges
+        const flowEdges: Edge[] = [];
+        graph.edges.forEach((e: any) => {
+            let targetId = e.target;
+            const simpleTarget = targetId.split('/').pop()?.split('.')[0];
+
+            let found = flowNodes.find(n => n.id === targetId);
+
+            if (!found && simpleTarget) {
+                found = flowNodes.find(n => {
+                    const nodeName = n.id.split('/').pop()?.split('.')[0];
+                    return nodeName === simpleTarget && n.id !== e.source;
+                });
+            }
+
+            if (found) {
+                flowEdges.push({
+                    id: e.id,
+                    source: e.source,
+                    target: found.id,
+                    animated: true,
+                    style: { stroke: '#555' }
+                });
+            }
+        });
+
+        setEdges(flowEdges);
+
+    }, [initialGraphData, setNodes, setEdges]);
 
     const onConnect = useCallback(
         async (params: Connection) => {
@@ -106,7 +141,7 @@ export default function GraphEditor({ projectPath, onNodeSelect }: GraphEditorPr
                 <Panel position="top-right">
                     <button onClick={createPage} style={{ marginRight: 10 }}>+ Add Page</button>
                     <button onClick={saveLayout} style={{ marginRight: 10 }}>Save Layout</button>
-                    <button onClick={loadGraph}>Refresh</button>
+                    <button onClick={onRefresh}>Refresh</button>
                 </Panel>
             </ReactFlow>
         </div>

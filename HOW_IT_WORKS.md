@@ -1,4 +1,4 @@
-# How LocalWeaver Works ⚙️
+# How LocalWeaver Works
 
 This document outlines the technical architecture of LocalWeaver. The application is built on the concept of **"Visual State to File System Synchronization."**
 

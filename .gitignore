@@ -5,3 +5,4 @@ dist
 *.gguf
 .env
 app/src-tauri/target
+matrix-portfolio

@@ -72,38 +72,87 @@ fn scan_project(path: String) -> Result<ProjectGraph, String> {
         }
     }
 
-    // 2. Walk directory for HTML files
+    // 2. Walk directory
     let walker = WalkDir::new(project_path).into_iter();
+
+    // Compile regex for imports
+    let import_regex =
+        regex::Regex::new(r#"(?:import|from|require)\s*\(?['"]([^'"]+)['"]"#).unwrap();
+
     for entry in walker.filter_entry(|e| {
-        !e.file_name()
-            .to_str()
-            .map(|s| s.starts_with('.'))
-            .unwrap_or(false)
+        let name = e.file_name().to_str().unwrap_or("");
+        // Ignore hidden files and common build/dependency folders
+        !name.starts_with('.')
+            && name != "node_modules"
+            && name != "dist"
+            && name != "build"
+            && name != "target"
     }) {
         let entry = entry.map_err(|e| e.to_string())?;
         if entry.file_type().is_file() {
             if let Some(extension) = entry.path().extension() {
-                if extension == "html" {
+                let ext_str = extension.to_string_lossy().to_string();
+                if ["html", "vue", "jsx", "tsx", "js", "ts"].contains(&ext_str.as_str()) {
+                    let path_buf = entry.path();
+                    let relative_path = path_buf
+                        .strip_prefix(project_path)
+                        .map(|p| p.to_string_lossy().replace("\\", "/"))
+                        .unwrap_or_else(|_| entry.file_name().to_string_lossy().to_string());
+
                     let file_name = entry.file_name().to_string_lossy().to_string();
-                    let relative_path = file_name.clone(); // For simplicity, using filename as ID. ideally relative path.
+                    let mut title = file_name.clone();
+                    let mut parsed_edges = Vec::new();
 
-                    // Parse HTML for title and links
-                    let content = fs::read_to_string(entry.path()).map_err(|e| e.to_string())?;
-                    let document = Html::parse_document(&content);
+                    if let Ok(content) = fs::read_to_string(entry.path()) {
+                        // 1. HTML Title Parsing (for html/vue)
+                        if ext_str == "html" || ext_str == "vue" {
+                            let document = Html::parse_document(&content);
+                            let title_selector = Selector::parse("title").unwrap();
+                            if let Some(t) = document.select(&title_selector).next() {
+                                title = t.text().collect::<String>();
+                            }
+                        }
 
-                    // Title
-                    let title_selector = Selector::parse("title").unwrap();
-                    let title = document
-                        .select(&title_selector)
-                        .next()
-                        .map(|el| el.text().collect::<String>())
-                        .unwrap_or(file_name.clone());
+                        // 2. Link Parsing (HTML tags)
+                        if ext_str == "html" || ext_str == "vue" {
+                            let document = Html::parse_document(&content);
+                            let a_selector = Selector::parse("a").unwrap();
+                            for element in document.select(&a_selector) {
+                                if let Some(href) = element.value().attr("href") {
+                                    if !href.starts_with("http") && !href.starts_with("#") {
+                                        parsed_edges.push(href.to_string());
+                                    }
+                                }
+                            }
+                        }
+
+                        // 3. Import Parsing (JS/TS/Vue)
+                        if ["vue", "jsx", "tsx", "js", "ts"].contains(&ext_str.as_str()) {
+                            for cap in import_regex.captures_iter(&content) {
+                                if let Some(match_str) = cap.get(1) {
+                                    let import_path = match_str.as_str();
+                                    // Filter out external libraries (start with alphanumeric usually)
+                                    // Keep relative paths (./, ../, /) or defined aliases if possible
+                                    // For now, simple heuristic: starts with . or /
+                                    if import_path.starts_with('.') || import_path.starts_with('/')
+                                    {
+                                        parsed_edges.push(import_path.to_string());
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Normalize Edges
+                    // This is naive. Ideally we resolve "./Component" to "src/components/Component.tsx"
+                    // For now, we just strip "./" and hope for a partial string match in the frontend or simple ID match
 
                     // Node
                     let position = saved_positions
                         .get(&relative_path)
                         .cloned()
                         .unwrap_or(Position { x: 0.0, y: 0.0 });
+
                     nodes.push(Node {
                         id: relative_path.clone(),
                         position,
@@ -111,21 +160,43 @@ fn scan_project(path: String) -> Result<ProjectGraph, String> {
                         node_type: "default".to_string(),
                     });
 
-                    // Edges (Links)
-                    let a_selector = Selector::parse("a").unwrap();
-                    for element in document.select(&a_selector) {
-                        if let Some(href) = element.value().attr("href") {
-                            if href.ends_with(".html") {
-                                // Simple link check
-                                let target = href.to_string();
-                                // Avoid self-loops or duplicates here if needed, but for now allow
-                                let edge_id = format!("{}-{}", relative_path, target);
-                                edges.push(Edge {
-                                    id: edge_id,
-                                    source: relative_path.clone(),
-                                    target,
-                                });
+                    // Add Edges
+                    for target in parsed_edges {
+                        let edge_target_id;
+
+                        // Check if it's a relative import like "./components/Navbar"
+                        if target.starts_with("./") || target.starts_with("../") {
+                            let current_dir = Path::new(&relative_path).parent();
+                            if let Some(dir) = current_dir {
+                                let resolved = dir.join(&target);
+                                // CRITICAL: Normalize to forward slashes for ID matching
+                                let resolved_str = resolved.to_string_lossy().replace("\\", "/");
+
+                                // Clean up ./ and ../ from the string if possible, but standard replace isn't path canonicalization
+                                // The simplest connection strategy: Use the resolved path as the target ID
+                                // (assuming scan found the file at that exact relative path)
+                                // We strip implicit extensions if needed later, but for now:
+                                edge_target_id = Some(resolved_str);
+                            } else {
+                                edge_target_id = Some(target.clone());
                             }
+                        } else {
+                            // Absolute-ish path (packages or aliases)
+                            edge_target_id = Some(target.clone());
+                        }
+
+                        if let Some(term) = edge_target_id {
+                            let _extensions = [".jsx", ".tsx", ".vue", ".js", ".ts", ".html"];
+
+                            // Clean up the term to ensure it matches Node IDs (which have no ./ usually)
+                            let final_target = term.replace("./", "");
+
+                            let edge_id = format!("{}-{}", relative_path, final_target);
+                            edges.push(Edge {
+                                id: edge_id,
+                                source: relative_path.clone(),
+                                target: final_target,
+                            });
                         }
                     }
                 }
@@ -225,6 +296,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
             scan_project,
             save_graph_state,

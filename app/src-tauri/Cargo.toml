@@ -26,4 +26,5 @@ walkdir = "2"
 scraper = "0.19"
 regex = "1"
 tauri-plugin-dialog = "2"
+tauri-plugin-shell = "2.3.3"
 

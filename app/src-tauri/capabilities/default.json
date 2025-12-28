@@ -8,6 +8,50 @@
   "permissions": [
     "core:default",
     "opener:default",
-    "dialog:default"
+    "dialog:default",
+    "shell:allow-open",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "npm-start",
+          "cmd": "npm.cmd",
+          "args": [
+            "run",
+            "dev"
+          ]
+        },
+        {
+          "name": "npm-start",
+          "cmd": "npm",
+          "args": [
+            "run",
+            "dev"
+          ]
+        }
+      ]
+    },
+    {
+      "identifier": "shell:allow-spawn",
+      "allow": [
+        {
+          "name": "npm-start",
+          "cmd": "npm.cmd",
+          "args": [
+            "run",
+            "dev"
+          ]
+        },
+        {
+          "name": "npm-start",
+          "cmd": "npm",
+          "args": [
+            "run",
+            "dev"
+          ]
+        }
+      ]
+    },
+    "shell:allow-kill"
   ]
 }
