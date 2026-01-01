@@ -6,3 +6,4 @@ dist
 .env
 app/src-tauri/target
 matrix-portfolio
+code.md

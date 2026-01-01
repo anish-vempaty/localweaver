@@ -1,13 +1,14 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, lazy, Suspense } from "react";
 import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
 import "./App.css";
-import GraphEditor from "./components/GraphEditor";
-import PageEditor from "./components/PageEditor";
 import ProjectRunner from "./components/ProjectRunner";
 import LivePreview from "./components/LivePreview";
 
-import VisualBuilder from "./components/VisualBuilder";
+// Lazy Load Heavy Components
+const GraphEditor = lazy(() => import("./components/GraphEditor"));
+const PageEditor = lazy(() => import("./components/PageEditor"));
+const VisualBuilder = lazy(() => import("./components/VisualBuilder"));
 
 interface BackendGraph {
   nodes: any[];
@@ -106,37 +107,43 @@ function App() {
 
       <div className="content" style={{ flex: 1, position: 'relative', overflow: 'hidden', display: 'flex' }}>
         <div style={{ width: '100%', height: '100%', display: activeTab === 'graph' ? 'block' : 'none' }}>
-          <GraphEditor
-            projectPath={projectPath}
-            onNodeSelect={handleNodeSelect}
-            initialGraphData={graphData}
-            onRefresh={loadGraph}
-          />
+          <Suspense fallback={<div className="loading-overlay">Loading Graph...</div>}>
+            <GraphEditor
+              projectPath={projectPath}
+              onNodeSelect={handleNodeSelect}
+              initialGraphData={graphData}
+              onRefresh={loadGraph}
+            />
+          </Suspense>
         </div>
 
         <div style={{ width: '100%', height: '100%', display: activeTab === 'visual_builder' ? 'block' : 'none' }}>
-          <VisualBuilder projectPath={projectPath} />
+          <Suspense fallback={<div className="loading-overlay">Loading Visual Builder...</div>}>
+            <VisualBuilder projectPath={projectPath} />
+          </Suspense>
         </div>
 
         {/* Editor Tab: Split View if Framework, Single View if HTML */}
         <div style={{ width: '100%', height: '100%', display: activeTab === 'editor' && selectedFile ? 'flex' : 'none' }}>
           {selectedFile && (
-            <>
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                <PageEditor
-                  projectPath={projectPath}
-                  filename={selectedFile}
-                  neighbors={neighbors}
-                  onNavigate={handleNodeSelect}
-                />
-              </div>
-              {/* Sidebar for Runner/Mini-Preview */}
-              {isFrameworkFile && (
-                <div style={{ width: 400, borderLeft: '1px solid #444', display: 'flex', flexDirection: 'column' }}>
-                  {/* Placeholder to keep layout consistent */}
+            <Suspense fallback={<div className="loading-overlay">Loading Editor...</div>}>
+              <>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                  <PageEditor
+                    projectPath={projectPath}
+                    filename={selectedFile}
+                    neighbors={neighbors}
+                    onNavigate={handleNodeSelect}
+                  />
                 </div>
-              )}
-            </>
+                {/* Sidebar for Runner/Mini-Preview */}
+                {isFrameworkFile && (
+                  <div style={{ width: 400, borderLeft: '1px solid #444', display: 'flex', flexDirection: 'column' }}>
+                    {/* Placeholder to keep layout consistent */}
+                  </div>
+                )}
+              </>
+            </Suspense>
           )}
         </div>
 

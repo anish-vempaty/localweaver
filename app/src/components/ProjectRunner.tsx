@@ -1,6 +1,7 @@
 
 import { useState, useRef } from 'react';
 import { Command, Child } from '@tauri-apps/plugin-shell';
+import { invoke } from '@tauri-apps/api/core';
 
 interface ProjectRunnerProps {
     projectPath: string;
@@ -70,12 +71,23 @@ export default function ProjectRunner({ projectPath, onUrlReady }: ProjectRunner
     };
 
     const stopServer = async () => {
-        if (childRef.current) {
-            setLogs(prev => [...prev, "Stopping server..."]);
+        if (pid) {
+            setLogs(prev => [...prev, "Stopping server tree..."]);
             try {
-                await childRef.current.kill();
+                // Call our custom Rust command to kill the process tree
+                await invoke('kill_process', { pid });
+
+                // Cleanup local state
+                setPid(null);
+                childRef.current = null;
+                setStatus('idle');
+                setLogs(prev => [...prev, "Server stopped."]);
             } catch (e) {
                 setLogs(prev => [...prev, `Error killing process: ${e}`]);
+                // Fallback to simple kill if custom command fails (though unlikely)
+                if (childRef.current) {
+                    childRef.current.kill().catch(() => { });
+                }
             }
         }
     };

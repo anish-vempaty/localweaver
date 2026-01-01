@@ -13,7 +13,8 @@ const intensities = ['50', '100', '200', '300', '400', '500', '600', '700', '800
 
 export default function TailwindPalette({ editor, onClose }: TailwindPaletteProps) {
     const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
-    const [activeTab, setActiveTab] = useState<'colors' | 'typography' | 'layout'>('colors');
+    const [activeTab, setActiveTab] = useState<'colors' | 'typography' | 'layout' | 'effects'>('colors');
+    const [modifier, setModifier] = useState<'' | 'hover:' | 'focus:'>('');
 
     // For color picker logic
     const [colorMode, setColorMode] = useState<'bg' | 'text' | 'border' | 'from' | 'to'>('bg');
@@ -39,18 +40,12 @@ export default function TailwindPalette({ editor, onClose }: TailwindPaletteProp
         const selected = editor?.getSelected();
         if (!selected) return;
 
-        // Simple toggle logic? Or smart replacement?
-        // For colors, we usually want to replace.
-        if (cls.startsWith('bg-') || cls.startsWith('text-')) {
-            // remove existing of same type?
-            // simplistic approach: just add. 
-            // improvement: remove conflicting regex
-        }
+        const finalClass = modifier + cls;
 
-        if (selectedClasses.includes(cls)) {
-            selected.removeClass(cls);
+        if (selectedClasses.includes(finalClass)) {
+            selected.removeClass(finalClass);
         } else {
-            selected.addClass(cls);
+            selected.addClass(finalClass);
         }
         setSelectedClasses(selected.getClasses());
     };
@@ -73,11 +68,20 @@ export default function TailwindPalette({ editor, onClose }: TailwindPaletteProp
                 <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#aaa', cursor: 'pointer' }}><X size={18} /></button>
             </div>
 
+            {/* Modifier Toggles (Hover/Focus) */}
+            <div style={{ padding: '10px 20px', background: '#252525', borderBottom: '1px solid #333', display: 'flex', gap: 10, alignItems: 'center' }}>
+                <span style={{ fontSize: 12, color: '#888', fontWeight: 600 }}>STATE:</span>
+                <button onClick={() => setModifier('')} style={{ padding: '4px 8px', borderRadius: 4, border: 'none', cursor: 'pointer', background: modifier === '' ? '#3b82f6' : '#333', color: 'white', fontSize: 12 }}>Normal</button>
+                <button onClick={() => setModifier('hover:')} style={{ padding: '4px 8px', borderRadius: 4, border: 'none', cursor: 'pointer', background: modifier === 'hover:' ? '#3b82f6' : '#333', color: 'white', fontSize: 12 }}>Hover</button>
+                <button onClick={() => setModifier('focus:')} style={{ padding: '4px 8px', borderRadius: 4, border: 'none', cursor: 'pointer', background: modifier === 'focus:' ? '#3b82f6' : '#333', color: 'white', fontSize: 12 }}>Focus</button>
+            </div>
+
             {/* Tabs */}
             <div style={{ display: 'flex', borderBottom: '1px solid #333' }}>
                 <Tab label="Colors" active={activeTab === 'colors'} onClick={() => setActiveTab('colors')} />
                 <Tab label="Typography" active={activeTab === 'typography'} onClick={() => setActiveTab('typography')} />
-                <Tab label="Layout & Spacing" active={activeTab === 'layout'} onClick={() => setActiveTab('layout')} />
+                <Tab label="Layout" active={activeTab === 'layout'} onClick={() => setActiveTab('layout')} />
+                <Tab label="Effects" active={activeTab === 'effects'} onClick={() => setActiveTab('effects')} />
             </div>
 
             {/* Content */}
@@ -89,13 +93,18 @@ export default function TailwindPalette({ editor, onClose }: TailwindPaletteProp
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
                         {selectedClasses.length === 0 && <span style={{ color: '#555', fontSize: 13 }}>No classes selected</span>}
                         {selectedClasses.map(c => (
-                            <span key={c} onClick={() => toggleClass(c)} style={{ background: '#333', color: '#ccc', borderRadius: 12, padding: '2px 8px', fontSize: 12, cursor: 'pointer', border: '1px solid #444' }}>
+                            <span key={c} onClick={() => {
+                                // removing logic needs to be aware of the exact string value
+                                const selected = editor?.getSelected();
+                                if (selected) { selected.removeClass(c); setSelectedClasses(selected.getClasses()); }
+                            }} style={{ background: '#333', color: '#ccc', borderRadius: 12, padding: '2px 8px', fontSize: 12, cursor: 'pointer', border: '1px solid #444' }}>
                                 {c} &times;
                             </span>
                         ))}
                     </div>
                 </div>
 
+                {/* Colors Tab */}
                 {activeTab === 'colors' && (
                     <div>
                         <div style={{ display: 'flex', marginBottom: 15, gap: 10 }}>
@@ -111,7 +120,7 @@ export default function TailwindPalette({ editor, onClose }: TailwindPaletteProp
                                 <div style={{ fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Gradient Direction</div>
                                 <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
                                     {['bg-gradient-to-t', 'bg-gradient-to-tr', 'bg-gradient-to-r', 'bg-gradient-to-br', 'bg-gradient-to-b', 'bg-gradient-to-bl', 'bg-gradient-to-l', 'bg-gradient-to-tl', 'bg-none'].map(d => (
-                                        <Chip key={d} label={d.replace('bg-gradient-', '')} active={selectedClasses.includes(d)} onClick={() => toggleClass(d)} />
+                                        <Chip key={d} label={d.replace('bg-gradient-', '')} active={selectedClasses.includes(modifier + d)} onClick={() => toggleClass(d)} />
                                     ))}
                                 </div>
                             </div>
@@ -143,7 +152,7 @@ export default function TailwindPalette({ editor, onClose }: TailwindPaletteProp
                                     {intensities.map(i => {
                                         let prefix = colorMode === 'bg' ? 'bg' : colorMode === 'text' ? 'text' : colorMode === 'border' ? 'border' : colorMode;
                                         const cls = `${prefix}-${selectedColorFamily}-${i}`;
-                                        const isActive = selectedClasses.includes(cls);
+                                        const isActive = selectedClasses.includes(modifier + cls);
                                         return (
                                             <div key={i} onClick={() => toggleClass(cls)}
                                                 style={{
@@ -166,76 +175,140 @@ export default function TailwindPalette({ editor, onClose }: TailwindPaletteProp
                     </div>
                 )}
 
+                {/* Typography Tab */}
                 {activeTab === 'typography' && (
                     <div>
                         <ControlGroup title="Size">
-                            {['text-xs', 'text-sm', 'text-base', 'text-lg', 'text-xl', 'text-2xl', 'text-3xl', 'text-4xl', 'text-5xl', 'text-6xl', 'text-7xl', 'text-8xl', 'text-9xl'].map(c => (
-                                <Chip key={c} label={c.replace('text-', '')} active={selectedClasses.includes(c)} onClick={() => toggleClass(c)} />
+                            {['text-xs', 'text-sm', 'text-base', 'text-lg', 'text-xl', 'text-2xl', 'text-3xl', 'text-4xl', 'text-5xl', 'text-6xl', 'text-7xl'].map(c => (
+                                <Chip key={c} label={c.replace('text-', '')} active={selectedClasses.includes(modifier + c)} onClick={() => toggleClass(c)} />
                             ))}
                         </ControlGroup>
                         <ControlGroup title="Weight">
                             {['font-thin', 'font-light', 'font-normal', 'font-medium', 'font-semibold', 'font-bold', 'font-extrabold', 'font-black'].map(c => (
-                                <Chip key={c} label={c.replace('font-', '')} active={selectedClasses.includes(c)} onClick={() => toggleClass(c)} />
+                                <Chip key={c} label={c.replace('font-', '')} active={selectedClasses.includes(modifier + c)} onClick={() => toggleClass(c)} />
                             ))}
                         </ControlGroup>
                         <ControlGroup title="Alignment & Decoration">
                             {['text-left', 'text-center', 'text-right', 'text-justify', 'underline', 'line-through', 'no-underline', 'uppercase', 'lowercase', 'capitalize'].map(c => (
-                                <Chip key={c} label={c.replace('text-', '')} active={selectedClasses.includes(c)} onClick={() => toggleClass(c)} />
+                                <Chip key={c} label={c.replace('text-', '')} active={selectedClasses.includes(modifier + c)} onClick={() => toggleClass(c)} />
                             ))}
                         </ControlGroup>
                         <ControlGroup title="Letter Spacing">
                             {['tracking-tighter', 'tracking-normal', 'tracking-widest'].map(c => (
-                                <Chip key={c} label={c.replace('tracking-', '')} active={selectedClasses.includes(c)} onClick={() => toggleClass(c)} />
+                                <Chip key={c} label={c.replace('tracking-', '')} active={selectedClasses.includes(modifier + c)} onClick={() => toggleClass(c)} />
                             ))}
                         </ControlGroup>
                     </div>
                 )}
 
+                {/* Layout Tab */}
                 {activeTab === 'layout' && (
                     <div>
                         <ControlGroup title="Sizing (Fit to Page)">
                             {['w-full', 'h-full', 'w-screen', 'h-screen', 'min-h-screen', 'max-w-screen-sm', 'max-w-screen-md', 'max-w-screen-lg', 'max-w-screen-xl', 'max-w-full'].map(c => (
-                                <Chip key={c} label={c} active={selectedClasses.includes(c)} onClick={() => toggleClass(c)} />
+                                <Chip key={c} label={c} active={selectedClasses.includes(modifier + c)} onClick={() => toggleClass(c)} />
                             ))}
                         </ControlGroup>
                         <ControlGroup title="Padding (All Sides)">
                             {['p-0', 'p-1', 'p-2', 'p-4', 'p-6', 'p-8', 'p-12', 'p-16'].map(c => (
-                                <Chip key={c} label={c} active={selectedClasses.includes(c)} onClick={() => toggleClass(c)} />
+                                <Chip key={c} label={c} active={selectedClasses.includes(modifier + c)} onClick={() => toggleClass(c)} />
                             ))}
                         </ControlGroup>
                         <ControlGroup title="Margin (All Sides)">
                             {['m-0', 'm-1', 'm-2', 'm-4', 'm-6', 'm-8', 'm-12', 'm-16', 'mx-auto', 'my-auto'].map(c => (
-                                <Chip key={c} label={c} active={selectedClasses.includes(c)} onClick={() => toggleClass(c)} />
+                                <Chip key={c} label={c} active={selectedClasses.includes(modifier + c)} onClick={() => toggleClass(c)} />
                             ))}
                         </ControlGroup>
                         <ControlGroup title="Display">
                             {['block', 'flex', 'grid', 'inline-block', 'hidden'].map(c => (
-                                <Chip key={c} label={c} active={selectedClasses.includes(c)} onClick={() => toggleClass(c)} />
+                                <Chip key={c} label={c} active={selectedClasses.includes(modifier + c)} onClick={() => toggleClass(c)} />
                             ))}
                         </ControlGroup>
                         <ControlGroup title="Flex Alignment">
                             {['items-center', 'items-start', 'items-end', 'justify-center', 'justify-between', 'justify-start', 'justify-end', 'flex-col', 'flex-row', 'flex-wrap', 'gap-2', 'gap-4', 'gap-8'].map(c => (
-                                <Chip key={c} label={c} active={selectedClasses.includes(c)} onClick={() => toggleClass(c)} />
+                                <Chip key={c} label={c} active={selectedClasses.includes(modifier + c)} onClick={() => toggleClass(c)} />
                             ))}
                         </ControlGroup>
-                        <ControlGroup title="Borders & Effects">
+                        <ControlGroup title="Border Radius">
                             {['rounded-none', 'rounded-sm', 'rounded', 'rounded-lg', 'rounded-xl', 'rounded-2xl', 'rounded-full'].map(c => (
-                                <Chip key={c} label={c.replace('rounded-', '') || 'md'} active={selectedClasses.includes(c)} onClick={() => toggleClass(c)} />
+                                <Chip key={c} label={c.replace('rounded-', '') || 'md'} active={selectedClasses.includes(modifier + c)} onClick={() => toggleClass(c)} />
                             ))}
+                        </ControlGroup>
+                        <ControlGroup title="Border Width">
                             {['border', 'border-0', 'border-2', 'border-4', 'border-8'].map(c => (
-                                <Chip key={c} label={c} active={selectedClasses.includes(c)} onClick={() => toggleClass(c)} />
-                            ))}
-                            {['shadow-none', 'shadow-sm', 'shadow', 'shadow-md', 'shadow-lg', 'shadow-xl', 'shadow-2xl'].map(c => (
-                                <Chip key={c} label={c} active={selectedClasses.includes(c)} onClick={() => toggleClass(c)} />
-                            ))}
-                            {['opacity-0', 'opacity-25', 'opacity-50', 'opacity-75', 'opacity-100'].map(c => (
-                                <Chip key={c} label={c} active={selectedClasses.includes(c)} onClick={() => toggleClass(c)} />
+                                <Chip key={c} label={c} active={selectedClasses.includes(modifier + c)} onClick={() => toggleClass(c)} />
                             ))}
                         </ControlGroup>
                     </div>
                 )}
+
+                {/* EFFECTS TAB */}
+                {activeTab === 'effects' && (
+                    <div>
+                        <ControlGroup title="Shadows">
+                            {['shadow-none', 'shadow-sm', 'shadow', 'shadow-md', 'shadow-lg', 'shadow-xl', 'shadow-2xl', 'shadow-inner'].map(c => (
+                                <Chip key={c} label={c} active={selectedClasses.includes(modifier + c)} onClick={() => toggleClass(c)} />
+                            ))}
+                        </ControlGroup>
+
+                        <ControlGroup title="Opacity">
+                            {['opacity-0', 'opacity-25', 'opacity-50', 'opacity-75', 'opacity-100'].map(c => (
+                                <Chip key={c} label={c} active={selectedClasses.includes(modifier + c)} onClick={() => toggleClass(c)} />
+                            ))}
+                        </ControlGroup>
+
+                        <ControlGroup title="Transitions">
+                            {['transition', 'transition-all', 'transition-colors', 'transition-opacity', 'transition-transform', 'transform'].map(c => (
+                                <Chip key={c} label={c} active={selectedClasses.includes(modifier + c)} onClick={() => toggleClass(c)} />
+                            ))}
+                        </ControlGroup>
+
+                        <ControlGroup title="Duration (Speed)">
+                            {['duration-75', 'duration-100', 'duration-150', 'duration-200', 'duration-300', 'duration-500', 'duration-700', 'duration-1000'].map(c => (
+                                <Chip key={c} label={c.replace('duration-', '') + 'ms'} active={selectedClasses.includes(modifier + c)} onClick={() => toggleClass(c)} />
+                            ))}
+                        </ControlGroup>
+
+                        <ControlGroup title="Feel (Ease)">
+                            {['ease-linear', 'ease-in', 'ease-out', 'ease-in-out'].map(c => (
+                                <Chip key={c} label={c.replace('ease-', '')} active={selectedClasses.includes(modifier + c)} onClick={() => toggleClass(c)} />
+                            ))}
+                        </ControlGroup>
+
+                        <ControlGroup title="Animations">
+                            {['animate-none', 'animate-spin', 'animate-ping', 'animate-pulse', 'animate-bounce'].map(c => (
+                                <Chip key={c} label={c.replace('animate-', '')} active={selectedClasses.includes(modifier + c)} onClick={() => toggleClass(c)} />
+                            ))}
+                        </ControlGroup>
+
+                        <ControlGroup title="Transform: Scale">
+                            {['scale-50', 'scale-75', 'scale-90', 'scale-95', 'scale-100', 'scale-105', 'scale-110', 'scale-125', 'scale-150'].map(c => (
+                                <Chip key={c} label={c.replace('scale-', '') + '%'} active={selectedClasses.includes(modifier + c)} onClick={() => toggleClass(c)} />
+                            ))}
+                        </ControlGroup>
+
+                        <ControlGroup title="Transform: Rotate">
+                            {['rotate-0', 'rotate-1', 'rotate-2', 'rotate-3', 'rotate-6', 'rotate-12', 'rotate-45', 'rotate-90', 'rotate-180'].map(c => (
+                                <Chip key={c} label={c.replace('rotate-', '') + '°'} active={selectedClasses.includes(modifier + c)} onClick={() => toggleClass(c)} />
+                            ))}
+                        </ControlGroup>
+
+                        <ControlGroup title="Transform: Translate (Move)">
+                            {['translate-x-1', 'translate-x-4', 'translate-y-1', 'translate-y-4', '-translate-y-1', '-translate-y-4'].map(c => (
+                                <Chip key={c} label={c} active={selectedClasses.includes(modifier + c)} onClick={() => toggleClass(c)} />
+                            ))}
+                        </ControlGroup>
+
+                        <ControlGroup title="Transform: Skew">
+                            {['skew-x-3', 'skew-y-3', '-skew-x-3', '-skew-y-3'].map(c => (
+                                <Chip key={c} label={c} active={selectedClasses.includes(modifier + c)} onClick={() => toggleClass(c)} />
+                            ))}
+                        </ControlGroup>
+                    </div>
+                )}
+
             </div>
-        </div>
+        </div >
     );
 }
 

@@ -2,7 +2,45 @@ use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
+use sysinfo::{Pid, System};
 use walkdir::WalkDir;
+
+#[tauri::command]
+fn kill_process(pid: u32) -> Result<(), String> {
+    let mut system = System::new_all();
+    system.refresh_all();
+
+    let root_pid = Pid::from_u32(pid);
+
+    // Collect all PIDs to kill (root + descendants)
+    let mut to_kill = Vec::new();
+    to_kill.push(root_pid);
+
+    // Simple iterative search for children (sysinfo doesn't have a direct tree iterator easily accessible without building it)
+    // For a deeper tree, we might need recursion.
+    // Let's do a robust recursive search.
+
+    fn collect_children(sys: &System, parent: Pid, list: &mut Vec<Pid>) {
+        for (pid, process) in sys.processes() {
+            if let Some(ppid) = process.parent() {
+                if ppid == parent {
+                    list.push(*pid);
+                    collect_children(sys, *pid, list);
+                }
+            }
+        }
+    }
+
+    collect_children(&system, root_pid, &mut to_kill);
+
+    for pid in to_kill {
+        if let Some(process) = system.process(pid) {
+            process.kill();
+        }
+    }
+
+    Ok(())
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct Position {
@@ -103,40 +141,46 @@ fn scan_project(path: String) -> Result<ProjectGraph, String> {
                     let mut title = file_name.clone();
                     let mut parsed_edges = Vec::new();
 
-                    if let Ok(content) = fs::read_to_string(entry.path()) {
-                        // 1. HTML Title Parsing (for html/vue)
-                        if ext_str == "html" || ext_str == "vue" {
-                            let document = Html::parse_document(&content);
-                            let title_selector = Selector::parse("title").unwrap();
-                            if let Some(t) = document.select(&title_selector).next() {
-                                title = t.text().collect::<String>();
+                    // OPTIMIZATION: Check file size before reading to protect RAM
+                    let metadata = fs::metadata(entry.path()).map_err(|e| e.to_string())?;
+                    // Limit to 100KB (source files rarely exceed this; prevents reading massive bundles)
+                    if metadata.len() < 100 * 1024 {
+                        if let Ok(content) = fs::read_to_string(entry.path()) {
+                            // 1. HTML Title Parsing (for html/vue)
+                            if ext_str == "html" || ext_str == "vue" {
+                                let document = Html::parse_document(&content);
+                                let title_selector = Selector::parse("title").unwrap();
+                                if let Some(t) = document.select(&title_selector).next() {
+                                    title = t.text().collect::<String>();
+                                }
                             }
-                        }
 
-                        // 2. Link Parsing (HTML tags)
-                        if ext_str == "html" || ext_str == "vue" {
-                            let document = Html::parse_document(&content);
-                            let a_selector = Selector::parse("a").unwrap();
-                            for element in document.select(&a_selector) {
-                                if let Some(href) = element.value().attr("href") {
-                                    if !href.starts_with("http") && !href.starts_with("#") {
-                                        parsed_edges.push(href.to_string());
+                            // 2. Link Parsing (HTML tags)
+                            if ext_str == "html" || ext_str == "vue" {
+                                let document = Html::parse_document(&content);
+                                let a_selector = Selector::parse("a").unwrap();
+                                for element in document.select(&a_selector) {
+                                    if let Some(href) = element.value().attr("href") {
+                                        if !href.starts_with("http") && !href.starts_with("#") {
+                                            parsed_edges.push(href.to_string());
+                                        }
                                     }
                                 }
                             }
-                        }
 
-                        // 3. Import Parsing (JS/TS/Vue)
-                        if ["vue", "jsx", "tsx", "js", "ts"].contains(&ext_str.as_str()) {
-                            for cap in import_regex.captures_iter(&content) {
-                                if let Some(match_str) = cap.get(1) {
-                                    let import_path = match_str.as_str();
-                                    // Filter out external libraries (start with alphanumeric usually)
-                                    // Keep relative paths (./, ../, /) or defined aliases if possible
-                                    // For now, simple heuristic: starts with . or /
-                                    if import_path.starts_with('.') || import_path.starts_with('/')
-                                    {
-                                        parsed_edges.push(import_path.to_string());
+                            // 3. Import Parsing (JS/TS/Vue)
+                            if ["vue", "jsx", "tsx", "js", "ts"].contains(&ext_str.as_str()) {
+                                for cap in import_regex.captures_iter(&content) {
+                                    if let Some(match_str) = cap.get(1) {
+                                        let import_path = match_str.as_str();
+                                        // Filter out external libraries (start with alphanumeric usually)
+                                        // Keep relative paths (./, ../, /) or defined aliases if possible
+                                        // For now, simple heuristic: starts with . or /
+                                        if import_path.starts_with('.')
+                                            || import_path.starts_with('/')
+                                        {
+                                            parsed_edges.push(import_path.to_string());
+                                        }
                                     }
                                 }
                             }
@@ -291,6 +335,20 @@ fn save_page_content(path: String, filename: String, content: String) -> Result<
     Ok(())
 }
 
+#[tauri::command]
+fn create_project_folder(path: String) -> Result<String, String> {
+    let project_path = Path::new(&path);
+    if project_path.exists() {
+        return Err("Directory already exists".to_string());
+    }
+    fs::create_dir_all(project_path).map_err(|e| e.to_string())?;
+
+    // Create an initial empty project.json or index.html to make it a valid project?
+    // User didn't ask, but it's good practice. Let's just make the folder for now as requested.
+
+    Ok(path)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -303,7 +361,9 @@ pub fn run() {
             create_page,
             connect_pages,
             read_page_content,
-            save_page_content
+            save_page_content,
+            kill_process,
+            create_project_folder
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
