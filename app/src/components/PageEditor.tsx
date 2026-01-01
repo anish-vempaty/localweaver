@@ -519,6 +519,35 @@ ${finalHtml}
         // Async Content Load
         const loadContent = async () => {
             try {
+                // --- INJECT PROJECT CSS ---
+                const injectProjectCss = async () => {
+                    const cssFiles = ['src/index.css', 'src/App.css', 'index.css', 'App.css'];
+                    let projectCss = "";
+                    for (const file of cssFiles) {
+                        try {
+                            const content = await invoke<string>('read_page_content', { path: projectPath, filename: file });
+                            if (content && !content.includes("File does not exist")) {
+                                projectCss += `\n/* ${file} */\n${content}`;
+                            }
+                        } catch (e) { }
+                    }
+
+                    const doc = editorInstance.current?.Canvas.getDocument();
+                    if (doc && doc.head && projectCss) {
+                        const existing = doc.head.querySelector('#project-css');
+                        if (existing) existing.remove();
+                        const style = doc.createElement('style');
+                        style.id = 'project-css';
+                        style.innerHTML = projectCss;
+                        doc.head.appendChild(style);
+                        // Auto-Dark Mode trigger
+                        if (projectCss.includes('dark')) editorInstance.current?.getWrapper().addClass('dark');
+                    }
+                };
+
+                // Run after load
+                setTimeout(injectProjectCss, 500);
+
                 // If it's HTML, we load the file content and parse it into blocks
                 if (isHtml) {
                     const content = await invoke<string>('read_page_content', { path: projectPath, filename });
@@ -561,18 +590,72 @@ ${finalHtml}
                         if (btn) btn.set('label', 'TW: OFF');
                     }
                 } else {
-                    // React/Vue Mode
-                    const content = await invoke<string>('read_page_content', { path: projectPath, filename });
+                    // React/Vue Mode via AST Bridge
+                    try {
+                        const nodes = await invoke<any[]>('get_component_tree', { path: projectPath, filename });
 
-                    // Attempt to parse JSX
-                    const parsedHtml = parseJSXToHtml(content); // Use our new helper
+                        if (nodes && nodes.length > 0) {
+                            // Helper to convert AST tree to HTML string
+                            const convertAstToHtml = (nodes: any[]): string => {
+                                return nodes.map(node => {
+                                    if (node.name === '#text') return node.text_content || '';
+                                    if (node.name === '#expression') return `<span data-gjs-type="text">${node.text_content}</span>`; // Render expression content as plain text, allowing parent styles (e.g. pre) to apply
 
-                    if (parsedHtml && !parsedHtml.includes("Could not auto-parse")) {
-                        editor.setComponents(parsedHtml);
-                        // We can also try to inject Tailwind if the file imports it, usually index.css is global though.
-                        setIsTailwind(true); // Default to on for modern stacks
-                    } else {
-                        editor.setComponents(`<div class="p-10 text-center text-gray-400 border-2 border-dashed border-gray-300 rounded"><span>${parsedHtml || "Visual Builder: Drag blocks here"}</span></div>`);
+                                    // Props to Attributes
+                                    let attrs = ` data-ast-id="${node.id}"`;
+                                    if (node.props) {
+                                        Object.entries(node.props).forEach(([k, v]) => {
+                                            if (k === 'className' || k === 'class') {
+                                                attrs += ` class="${v}"`;
+                                            } else if (k === 'style' && typeof v === 'string') {
+                                                // Simple style string support
+                                                attrs += ` style="${v}"`;
+                                            } else if (typeof v === 'string') {
+                                                attrs += ` ${k}="${v}"`;
+                                            }
+                                            // TODO: Handle complex objects/bools
+                                        });
+                                    }
+
+                                    // Tag mappings
+                                    let apiTag = node.name;
+                                    // Simply using div for unknown components for now, or the name itself if it's standard HTML
+                                    // HTML5 tags: 
+                                    const isHtmlTag = ['div', 'span', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'a', 'img', 'button', 'input', 'form', 'section', 'header', 'footer', 'nav', 'article', 'main', 'aside', 'pre', 'code', 'blockquote', 'br', 'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td'].includes(apiTag.toLowerCase());
+                                    const finalTag = isHtmlTag ? apiTag : 'div';
+
+                                    if (!isHtmlTag) {
+                                        attrs += ` data-component-name="${apiTag}"`;
+                                        // Visual cue for custom component
+                                        if (!attrs.includes('class=')) attrs += ` class="border border-dashed border-blue-300 p-2"`;
+                                        else attrs = attrs.replace('class="', 'class="border border-dashed border-blue-300 p-2 ');
+                                    }
+
+                                    const childrenHtml = node.children ? convertAstToHtml(node.children) : '';
+
+                                    return `<${finalTag}${attrs}>${childrenHtml}</${finalTag}>`;
+                                }).join('');
+                            };
+
+                            const generatedHtml = convertAstToHtml(nodes);
+                            editor.setComponents(generatedHtml);
+                            setIsTailwind(true);
+                        } else {
+                            // Fallback or Empty
+                            editor.setComponents(`<div class="p-10 text-center">No content found or empty AST.</div>`);
+                        }
+
+                    } catch (e) {
+                        console.error("AST Bridge Error:", e);
+                        // Fallback to old regex method
+                        const content = await invoke<string>('read_page_content', { path: projectPath, filename });
+                        const parsedHtml = parseJSXToHtml(content);
+                        if (parsedHtml && !parsedHtml.includes("Could not auto-parse")) {
+                            editor.setComponents(parsedHtml);
+                            setIsTailwind(true);
+                        } else {
+                            editor.setComponents(`<div class="p-10 text-center text-red-400">Error parsing JSX: ${e}</div>`);
+                        }
                     }
                 }
 

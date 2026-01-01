@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
-import { FolderPlus, FolderOpen, ArrowRight } from 'lucide-react';
+import { FolderPlus, FolderOpen, ArrowRight, BookOpen } from 'lucide-react';
 
 interface ProjectSelectorProps {
     onSelect: (path: string) => void;
@@ -81,14 +81,21 @@ const ProjectSelector = ({ onSelect }: ProjectSelectorProps) => {
                 <p style={{ color: '#888', marginBottom: 30 }}>Select an option to get started</p>
 
                 {mode === 'initial' && (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
                         <button onClick={() => setMode('new')} style={buttonStyle}>
                             <FolderPlus size={32} style={{ marginBottom: 10 }} />
                             <div>New Project</div>
+                            <div style={{ fontSize: 10, color: '#666', marginTop: 5 }}>(HTML, CSS)</div>
                         </button>
                         <button onClick={handleBrowse} style={buttonStyle}>
                             <FolderOpen size={32} style={{ marginBottom: 10 }} />
                             <div>Open Existing</div>
+                            <div style={{ fontSize: 10, color: '#666', marginTop: 5 }}>(HTML, CSS / JSX / TSX)</div>
+                        </button>
+                        <button onClick={() => onSelect(`${WORKSPACE_ROOT}\\test-site`)} style={buttonStyle}>
+                            <BookOpen size={32} style={{ marginBottom: 10 }} />
+                            <div>Open Example</div>
+                            <div style={{ fontSize: 10, color: '#666', marginTop: 5 }}>(HTML)</div>
                         </button>
                     </div>
                 )}

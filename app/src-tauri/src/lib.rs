@@ -5,6 +5,8 @@ use std::path::Path;
 use sysinfo::{Pid, System};
 use walkdir::WalkDir;
 
+mod ast_bridge;
+
 #[tauri::command]
 fn kill_process(pid: u32) -> Result<(), String> {
     let mut system = System::new_all();
@@ -349,6 +351,55 @@ fn create_project_folder(path: String) -> Result<String, String> {
     Ok(path)
 }
 
+// --- AST COMMANDS ---
+
+#[tauri::command]
+fn get_component_tree(
+    path: String,
+    filename: String,
+) -> Result<Vec<ast_bridge::ComponentNode>, String> {
+    let project_path = Path::new(&path);
+    let file_path = project_path.join(&filename);
+
+    if !file_path.exists() {
+        return Err("File does not exist".to_string());
+    }
+
+    let content = fs::read_to_string(file_path).map_err(|e| e.to_string())?;
+    ast_bridge::parse_jsx(&content)
+}
+
+#[tauri::command]
+fn update_component_props(
+    path: String,
+    filename: String,
+    node_id: String,
+    props: String,
+) -> Result<(), String> {
+    let project_path = Path::new(&path);
+    let file_path = project_path.join(&filename);
+
+    if !file_path.exists() {
+        return Err("File does not exist".to_string());
+    }
+
+    let content = fs::read_to_string(&file_path).map_err(|e| e.to_string())?;
+
+    let new_props: serde_json::Map<String, serde_json::Value> =
+        serde_json::from_str(&props).map_err(|e| e.to_string())?;
+
+    let update = ast_bridge::UpdateRequest {
+        node_id,
+        new_props: Some(new_props),
+    };
+
+    let new_code = ast_bridge::update_jsx_node(&content, vec![update])?;
+
+    fs::write(file_path, new_code).map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -363,7 +414,9 @@ pub fn run() {
             read_page_content,
             save_page_content,
             kill_process,
-            create_project_folder
+            create_project_folder,
+            get_component_tree,
+            update_component_props
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import "./App.css";
 import ProjectRunner from "./components/ProjectRunner";
 import LivePreview from "./components/LivePreview";
+import ProjectSelector from "./components/ProjectSelector";
 
 // Lazy Load Heavy Components
 const GraphEditor = lazy(() => import("./components/GraphEditor"));
@@ -16,7 +17,7 @@ interface BackendGraph {
 }
 
 function App() {
-  const [projectPath, setProjectPath] = useState("c:\\PROJECTS\\localweaver\\test-site");
+  const [projectPath, setProjectPath] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'graph' | 'editor' | 'preview' | 'visual_builder'>('graph');
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [liveUrl, setLiveUrl] = useState<string | null>(null);
@@ -178,6 +179,8 @@ function App() {
         </div>
 
       </div>
+
+      {!projectPath && <ProjectSelector onSelect={setProjectPath} />}
     </div>
   );
 }
