@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import ReactFlow, {
     Node,
     Edge,
@@ -13,6 +13,7 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { invoke } from '@tauri-apps/api/core';
+import TemplateModal from './TemplateModal';
 
 interface GraphEditorProps {
     projectPath: string;
@@ -24,6 +25,7 @@ interface GraphEditorProps {
 export default function GraphEditor({ projectPath, onNodeSelect, initialGraphData, onRefresh }: GraphEditorProps) {
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+    const [isModalOpen, setIsModalOpen] = useState(false);
 
     // Sync flow nodes when initialGraphData changes
     useEffect(() => {
@@ -110,19 +112,18 @@ export default function GraphEditor({ projectPath, onNodeSelect, initialGraphDat
         }
     };
 
-    const createPage = async () => {
-        const name = prompt("Enter page name (e.g. about.html):");
-        if (!name) return;
+    const handleCreatePage = async (filename: string, content: string) => {
         try {
-            await saveLayout(); // Save positions first
-            // Small delay to ensure FS write completes/propagates?
+            await saveLayout();
             await new Promise(r => setTimeout(r, 100));
-            await invoke('create_page', { path: projectPath, filename: name });
+            await invoke('create_page', { path: projectPath, filename: filename, content: content });
             onRefresh();
+            setIsModalOpen(false);
         } catch (err) {
             alert("Error creating page: " + err);
         }
     };
+
 
     return (
         <div style={{ width: '100%', height: '100%', background: '#1a1a1a' }}>
@@ -139,11 +140,16 @@ export default function GraphEditor({ projectPath, onNodeSelect, initialGraphDat
                 <Controls />
                 <MiniMap />
                 <Panel position="top-right">
-                    <button onClick={createPage} style={{ marginRight: 10 }}>+ Add Page</button>
+                    <button onClick={() => setIsModalOpen(true)} style={{ marginRight: 10 }}>+ Add Page</button>
                     <button onClick={saveLayout} style={{ marginRight: 10 }}>Save Layout</button>
                     <button onClick={onRefresh}>Refresh</button>
                 </Panel>
             </ReactFlow>
+            <TemplateModal
+                isOpen={isModalOpen}
+                onClose={() => setIsModalOpen(false)}
+                onCreate={handleCreatePage}
+            />
         </div>
     );
 }

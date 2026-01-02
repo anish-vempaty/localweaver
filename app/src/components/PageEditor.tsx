@@ -98,7 +98,8 @@ export default function PageEditor({ projectPath, filename, neighbors, onNavigat
                 styles: [
                     isHtml
                         ? 'https://unpkg.com/tailwindcss@^2/dist/tailwind.min.css'
-                        : 'https://unpkg.com/tailwindcss@^2/dist/tailwind.min.css'
+                        : 'https://unpkg.com/tailwindcss@^2/dist/tailwind.min.css',
+                    'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.0/css/all.min.css'
                 ],
                 scripts: []
             }

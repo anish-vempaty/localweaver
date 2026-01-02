@@ -274,7 +274,7 @@ fn save_graph_state(path: String, nodes: Vec<Node>) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn create_page(path: String, filename: String) -> Result<(), String> {
+fn create_page(path: String, filename: String, content: Option<String>) -> Result<(), String> {
     let project_path = Path::new(&path);
     let file_path = project_path.join(&filename);
 
@@ -282,12 +282,16 @@ fn create_page(path: String, filename: String) -> Result<(), String> {
         return Err("File already exists".to_string());
     }
 
-    let default_content = format!(
-        "<!DOCTYPE html>\n<html>\n<head>\n<title>{}</title>\n</head>\n<body>\n<h1>{}</h1>\n</body>\n</html>",
-        filename, filename
-    );
+    let final_content = if let Some(c) = content {
+        c
+    } else {
+        format!(
+            "<!DOCTYPE html>\n<html>\n<head>\n<title>{}</title>\n</head>\n<body>\n<h1>{}</h1>\n</body>\n</html>",
+            filename, filename
+        )
+    };
 
-    fs::write(file_path, default_content).map_err(|e| e.to_string())?;
+    fs::write(file_path, final_content).map_err(|e| e.to_string())?;
     Ok(())
 }
 
