@@ -50,7 +50,7 @@ function App() {
       const selected = await open({
         directory: true,
         multiple: false,
-        defaultPath: projectPath,
+        defaultPath: projectPath || undefined,
       });
       if (selected && typeof selected === 'string') {
         setProjectPath(selected);
@@ -74,6 +74,10 @@ function App() {
       };
     })
     : [];
+
+  if (!projectPath) {
+    return <ProjectSelector onSelect={setProjectPath} />;
+  }
 
   return (
     <div className="container">
@@ -179,8 +183,6 @@ function App() {
         </div>
 
       </div>
-
-      {!projectPath && <ProjectSelector onSelect={setProjectPath} />}
     </div>
   );
 }

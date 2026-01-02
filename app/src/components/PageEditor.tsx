@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import LinkManager from './LinkManager';
+import IconManager from './IconManager';
 import grapesjs from 'grapesjs';
 import 'grapesjs/dist/css/grapes.min.css';
 import webpagePreset from 'grapesjs-preset-webpage';
@@ -27,6 +29,8 @@ export default function PageEditor({ projectPath, filename, neighbors, onNavigat
     const [loading, setLoading] = useState(false);
     const [showPalette, setShowPalette] = useState(false);
     const [showInteractionManager, setShowInteractionManager] = useState(false);
+    const [showLinkManager, setShowLinkManager] = useState(false);
+    const [showIconManager, setShowIconManager] = useState(false);
 
     // Determines language for Monaco
     const language = filename.endsWith('.json') ? 'json' :
@@ -160,18 +164,21 @@ export default function PageEditor({ projectPath, filename, neighbors, onNavigat
         });
 
         // --- Editor Configuration ---
-        editor.Panels.addButton('options', { id: 'save-db', className: 'fa fa-floppy-o', command: 'save-db', attributes: { title: 'Save Project' } });
+        editor.Panels.addButton('options', { id: 'save-db', className: 'fa-solid fa-floppy-disk', command: 'save-db', attributes: { title: 'Save Project' } });
 
         // Add Tailwind Button
         editor.Panels.addButton('options', {
             id: 'toggle-tailwind',
-            className: 'fa fa-css3',
+            className: 'fa-brands fa-css3',
             command: 'toggle-tailwind',
             attributes: { title: 'Toggle Tailwind' }
         });
 
-        editor.Panels.addButton('options', { id: 'open-palette', className: 'fa fa-paint-brush', command: 'open-palette', attributes: { title: 'Open Palette' } });
-        editor.Panels.addButton('options', { id: 'open-interactions', className: 'fa fa-bolt', command: 'open-interactions', attributes: { title: 'JS Interactions' } });
+        editor.Panels.addButton('options', { id: 'open-palette', className: 'fa-solid fa-paint-brush', command: 'open-palette', attributes: { title: 'Open Palette' } });
+        // Smart Toolbar Buttons (Initially Hidden or Generic)
+        editor.Panels.addButton('options', { id: 'open-interactions', className: 'fa-solid fa-bolt', command: 'open-interactions', attributes: { title: 'Interactions' } });
+        editor.Panels.addButton('options', { id: 'open-link-manager', className: 'fa-solid fa-link', command: 'open-link-manager', attributes: { title: 'Link Settings' } });
+        editor.Panels.addButton('options', { id: 'open-icon-manager', className: 'fa-solid fa-star', command: 'open-icon-manager', attributes: { title: 'Select Icon' } });
 
         editor.Commands.add('toggle-tailwind', {
             run: () => setIsTailwind(prev => !prev)
@@ -179,10 +186,60 @@ export default function PageEditor({ projectPath, filename, neighbors, onNavigat
 
         editor.Commands.add('open-interactions', {
             run: () => {
-                setShowPalette(false); // Close other panels
+                setShowPalette(false);
+                setShowLinkManager(false);
+                setShowIconManager(false);
                 setShowInteractionManager(true);
             }
         });
+
+        editor.Commands.add('open-link-manager', {
+            run: () => {
+                setShowPalette(false);
+                setShowInteractionManager(false);
+                setShowIconManager(false);
+                setShowLinkManager(true);
+            }
+        });
+
+        editor.Commands.add('open-icon-manager', {
+            run: () => {
+                setShowPalette(false);
+                setShowInteractionManager(false);
+                setShowLinkManager(false);
+                setShowIconManager(true);
+            }
+        });
+
+        // Smart Context Listener
+        const updateToolbar = () => {
+            const selected = editor.getSelected();
+            const btnLink = editor.Panels.getButton('options', 'open-link-manager');
+            const btnIcon = editor.Panels.getButton('options', 'open-icon-manager');
+
+            // Default: Hide context-specific buttons
+            if (btnLink) btnLink.set('visible', false);
+            if (btnIcon) btnIcon.set('visible', false);
+
+            if (selected) {
+                const tag = selected.get('tagName');
+                const classes = selected.getClasses();
+                const isHyperlink = tag === 'a';
+                // Check for icon: tag 'i' OR has 'fa-' class
+                const isIcon = tag === 'i' || classes.some((c: string) => c.startsWith('fa-'));
+
+                if (isHyperlink && btnLink) {
+                    btnLink.set('visible', true);
+                    // Also ensure it's "active" if we want, but 'visible' is what affects display.
+                }
+
+                if (isIcon && btnIcon) {
+                    btnIcon.set('visible', true);
+                }
+            }
+        };
+
+        editor.on('component:selected', updateToolbar);
 
         // Initialize Double-Click to Add
         // We need to wait for blocks to be rendered
@@ -190,6 +247,58 @@ export default function PageEditor({ projectPath, filename, neighbors, onNavigat
             const blockManager = editor.BlockManager;
             const blocks = blockManager.getAll();
             const container = editor.getContainer();
+
+            // --- CSS Overrides for Font Awesome 6/7 and GrapesJS Conflict ---
+            const style = document.createElement('style');
+            style.innerHTML = `
+                /* 1. Force Font Awesome 7 Families (Fixes 'Box with X') */
+                /* GrapesJS tries to set 'FontAwesome', we force it to the loaded FA7 */
+                .fa, .fas, .fa-solid { font-family: "Font Awesome 7 Free" !important; font-weight: 900 !important; }
+                .far, .fa-regular { font-family: "Font Awesome 7 Free" !important; font-weight: 400 !important; }
+                .fab, .fa-brands { font-family: "Font Awesome 7 Brands" !important; }
+
+                /* 2. Fix Toolbar (Panel) Icons Sizing & Layout (Fixes 'Extending') */
+                /* Relaxed sizing to allow 'TW: ON' text to fit without wrapping */
+                .gjs-pn-btn {
+                    width: auto !important;
+                    min-width: 30px; /* Ensure small icons are still clickable */
+                    height: 100% !important; /* Ensure full height */
+                    padding: 5px 8px !important; /* More horizontal padding */
+                    margin: 0 2px;
+                    white-space: nowrap !important; /* PREVENT WRAPPING */
+                    display: inline-flex !important;
+                    align-items: center;
+                    justify-content: center;
+                }
+                .gjs-pn-btn .fa, 
+                .gjs-pn-btn .fas, 
+                .gjs-pn-btn .fa-solid, 
+                .gjs-pn-btn .fa-brands,
+                .gjs-pn-btn .fa-regular {
+                    font-size: 16px !important;
+                    line-height: normal;
+                }
+                
+                /* 3. Make Block Manager Icons Larger (Side Tray) */
+                .gjs-block .fa, 
+                .gjs-block .fas, 
+                .gjs-block .far, 
+                .gjs-block .fab,
+                .gjs-block .fa-solid,
+                .gjs-block .fa-regular,
+                .gjs-block .fa-brands {
+                     font-size: 24px !important; 
+                     line-height: 1;
+                     display: inline-block;
+                     color: inherit;
+                }
+                
+                /* Ensure category headers don't get messed up */
+                .gjs-block-category .gjs-title {
+                    border-bottom: 1px solid rgba(255,255,255,0.1);
+                }
+            `;
+            document.head.appendChild(style);
 
             // --- Define Custom Blocks ---
             const addBlock = (id: string, label: string, content: any, attributes: any = {}) => {
@@ -206,21 +315,89 @@ export default function PageEditor({ projectPath, filename, neighbors, onNavigat
                 classes: ['text-blue-500', 'underline'],
                 content: 'Link Text',
                 attributes: { href: '#' }
-            }, { class: 'fa fa-link' });
+            }, { class: 'fa-solid fa-link fa-2x' });
+
+            // --- LAYOUT BLOCKS ---
+            addBlock('section-block', 'Section', {
+                tagName: 'section',
+                classes: ['py-10', 'px-4'],
+                content: ''
+            }, { class: 'fa-solid fa-layer-group fa-2x', category: 'Layout' });
+
+            addBlock('container-block', 'Container', {
+                tagName: 'div',
+                classes: ['container', 'mx-auto', 'px-4'],
+                content: ''
+            }, { class: 'fa-solid fa-table-columns fa-2x', category: 'Layout' });
+
+            addBlock('div-block', 'Div', {
+                tagName: 'div',
+                classes: ['p-2'],
+                content: ''
+            }, { class: 'fa-solid fa-cube fa-2x', category: 'Layout' });
+
+            addBlock('header-block', 'Header', {
+                tagName: 'header',
+                classes: ['w-full', 'py-4', 'bg-gray-100'],
+                content: 'Header'
+            }, { class: 'fa-solid fa-heading fa-2x', category: 'Layout' });
+
+            addBlock('nav-block', 'Nav', {
+                tagName: 'nav',
+                classes: ['flex', 'gap-4', 'p-4'],
+                content: `<a href="#" class="text-blue-600 hover:underline">Home</a>
+                          <a href="#" class="text-blue-600 hover:underline">About</a>
+                          <a href="#" class="text-blue-600 hover:underline">Contact</a>`
+            }, { class: 'fa-solid fa-compass fa-2x', category: 'Layout' });
+
+            addBlock('main-block', 'Main', {
+                tagName: 'main',
+                classes: ['flex-1', 'py-8'],
+                content: ''
+            }, { class: 'fa-solid fa-window-maximize fa-2x', category: 'Layout' });
+
+            addBlock('footer-block', 'Footer', {
+                tagName: 'footer',
+                classes: ['w-full', 'py-6', 'bg-gray-800', 'text-white', 'text-center'],
+                content: '&copy; 2024 Your Company'
+            }, { class: 'fa-solid fa-copyright fa-2x', category: 'Layout' });
+
+            addBlock('aside-block', 'Aside', {
+                tagName: 'aside',
+                classes: ['w-64', 'bg-gray-50', 'p-4', 'border-l'],
+                content: 'Sidebar Content'
+            }, { class: 'fa-regular fa-note-sticky fa-2x', category: 'Layout' });
+
+            // --- MEDIA / ICONS ---
+            addBlock('icon-block', 'Icon', {
+                tagName: 'i',
+                classes: ['fa-solid', 'fa-star', 'text-2xl'],
+                content: ''
+            }, { class: 'fa-solid fa-star fa-2x', category: 'Basic' });
 
             // 2. Input
             addBlock('input-block', 'Input Field', {
                 tagName: 'input',
                 classes: ['border', 'border-gray-300', 'p-2', 'rounded', 'w-full'],
                 attributes: { placeholder: 'Type here...' }
-            }, { class: 'fa fa-pencil' });
+            }, { class: 'fa-solid fa-pencil fa-2x' });
 
             // 3. Button
-            addBlock('button-block', 'Button', {
+            // 3a. Button (Link)
+            addBlock('button-link', 'Button (Link)', {
+                tagName: 'a',
+                classes: ['inline-block', 'bg-blue-600', 'text-white', 'px-4', 'py-2', 'rounded', 'hover:bg-blue-700', 'transition', 'cursor-pointer', 'no-underline'],
+                content: 'Link Button',
+                attributes: { href: '#' }
+            }, { class: 'fa-solid fa-link fa-2x' });
+
+            // 3b. Button (Action)
+            addBlock('button-action', 'Button (Action)', {
                 tagName: 'button',
-                classes: ['bg-blue-600', 'text-white', 'px-4', 'py-2', 'rounded', 'hover:bg-blue-700', 'transition'],
-                content: 'Click Me'
-            }, { class: 'fa fa-square' });
+                classes: ['bg-green-600', 'text-white', 'px-4', 'py-2', 'rounded', 'hover:bg-green-700', 'transition'],
+                content: 'Action Button',
+                attributes: { type: 'button' }
+            }, { class: 'fa-solid fa-square-check fa-2x' });
 
             // 4. Dropdown
             addBlock('dropdown-block', 'Pop Down', {
@@ -230,7 +407,7 @@ export default function PageEditor({ projectPath, filename, neighbors, onNavigat
                     { tagName: 'option', content: 'Option 1' },
                     { tagName: 'option', content: 'Option 2' }
                 ]
-            }, { class: 'fa fa-caret-down' });
+            }, { class: 'fa-solid fa-caret-down fa-2x' });
 
             // 5. Scrolling Text (Marquee)
             addBlock('scrolling-text', 'Scrolling Text',
@@ -248,7 +425,7 @@ export default function PageEditor({ projectPath, filename, neighbors, onNavigat
                        animation: marquee 10s linear infinite;
                    }
                  </style>`,
-                { class: 'fa fa-exchange' });
+                { class: 'fa-solid fa-right-left fa-2x' });
 
             // 6. Card
             addBlock('card-block', 'Basic Card',
@@ -259,7 +436,7 @@ export default function PageEditor({ projectPath, filename, neighbors, onNavigat
                        <p class="text-gray-700 text-base">Lorem ipsum dolor sit amet, consectetur adipisicing elit.</p>
                    </div>
                  </div>`,
-                { class: 'fa fa-id-card' });
+                { class: 'fa-solid fa-id-card fa-2x' });
 
             // 7. Hover Tilt Card
             addBlock('tilt-card', 'Hovering Tilt',
@@ -269,7 +446,7 @@ export default function PageEditor({ projectPath, filename, neighbors, onNavigat
                        <p>I tilt and scale when you hover over me.</p>
                    </div>
                  </div>`,
-                { class: 'fa fa-paper-plane' });
+                { class: 'fa-solid fa-paper-plane fa-2x' });
 
             // Event Delegation for stability
             if (container) {
@@ -309,8 +486,8 @@ export default function PageEditor({ projectPath, filename, neighbors, onNavigat
             }
         });
 
-        editor.Panels.addButton('options', { id: 'open-palette', className: 'fa fa-paint-brush', command: 'open-palette', attributes: { title: 'Open Palette' } });
-        editor.Panels.addButton('options', { id: 'ai-gen', className: 'fa fa-magic', command: 'ai-gen', attributes: { title: 'AI Gen' } });
+        editor.Panels.addButton('options', { id: 'open-palette', className: 'fa-solid fa-paint-brush', command: 'open-palette', attributes: { title: 'Open Palette' } });
+        editor.Panels.addButton('options', { id: 'ai-gen', className: 'fa-solid fa-wand-magic-sparkles', command: 'ai-gen', attributes: { title: 'AI Gen' } });
 
         editor.Commands.add('open-palette', {
             run: () => {
@@ -339,16 +516,16 @@ export default function PageEditor({ projectPath, filename, neighbors, onNavigat
                 content.innerHTML = `
                     <div style="display: flex; flex-direction: column; gap: 10px; padding: 10px;">
                         <button id="btn-append" style="padding: 10px; background: #2ea44f; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                            <i class="fa fa-plus"></i> Append New Element
+                            <i class="fa-solid fa-plus"></i> Append New Element
                         </button>
                         <button id="btn-style" style="padding: 10px; background: #0d99ff; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                            <i class="fa fa-paint-brush"></i> Change Styles / Layout
+                            <i class="fa-solid fa-paint-brush"></i> Change Styles / Layout
                         </button>
                         <button id="btn-replace" style="padding: 10px; background: #d73a49; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                             <i class="fa fa-refresh"></i> Replace Selection
+                             <i class="fa-solid fa-rotate"></i> Replace Selection
                         </button>
                         <button id="btn-all" style="padding: 10px; background: #6f42c1; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                             <i class="fa fa-magic"></i> Generate Whole Page (Overwrite)
+                             <i class="fa-solid fa-wand-magic-sparkles"></i> Generate Whole Page (Overwrite)
                         </button>
                     </div>
                 `;
@@ -728,20 +905,31 @@ ${finalHtml}
             if (!doc || !doc.head) return;
 
             const head = doc.head;
-            const existing = head.querySelector('#tailwind-css');
+            const existingTailwind = head.querySelector('#tailwind-css');
+            const existingFontAwesome = head.querySelector('#font-awesome-css');
 
             if (isTailwind) {
-                if (!existing) {
+                if (!existingTailwind) {
                     const link = doc.createElement('link');
                     link.id = 'tailwind-css';
                     link.rel = 'stylesheet';
                     link.href = 'https://unpkg.com/tailwindcss@^2/dist/tailwind.min.css';
                     head.appendChild(link);
                 }
+                // Inject FA here too so it renders in canvas
+                if (!existingFontAwesome) {
+                    const faLink = doc.createElement('link');
+                    faLink.id = 'font-awesome-css';
+                    faLink.rel = 'stylesheet';
+                    faLink.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css';
+                    head.appendChild(faLink);
+                }
+
                 const btn = editor.Panels.getButton('options', 'toggle-tailwind');
                 if (btn) btn.set('label', 'TW: ON');
             } else {
-                if (existing) existing.remove();
+                if (existingTailwind) existingTailwind.remove();
+                if (existingFontAwesome) existingFontAwesome.remove(); // Remove FA if Tailwind is off
                 const btn = editor.Panels.getButton('options', 'toggle-tailwind');
                 if (btn) btn.set('label', 'TW: OFF');
             }
@@ -829,6 +1017,18 @@ ${finalHtml}
                                 <InteractionManager
                                     editor={editorInstance.current}
                                     onClose={() => setShowInteractionManager(false)}
+                                />
+                            )}
+                            {isVisualMode && showLinkManager && editorInstance.current && (
+                                <LinkManager
+                                    editor={editorInstance.current}
+                                    onClose={() => setShowLinkManager(false)}
+                                />
+                            )}
+                            {isVisualMode && showIconManager && editorInstance.current && (
+                                <IconManager
+                                    editor={editorInstance.current}
+                                    onClose={() => setShowIconManager(false)}
                                 />
                             )}
                         </>

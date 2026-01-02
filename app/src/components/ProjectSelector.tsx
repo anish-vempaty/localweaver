@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
-import { FolderPlus, FolderOpen, ArrowRight, BookOpen } from 'lucide-react';
+import { FolderPlus, FolderOpen, BookOpen } from 'lucide-react';
 
 interface ProjectSelectorProps {
     onSelect: (path: string) => void;
@@ -10,28 +10,30 @@ interface ProjectSelectorProps {
 const ProjectSelector = ({ onSelect }: ProjectSelectorProps) => {
     const [mode, setMode] = useState<'initial' | 'new'>('initial');
     const [projectName, setProjectName] = useState('');
+    const [parentDir, setParentDir] = useState<string>('');
     const [error, setError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
-
-    // Hardcoded workspace root as per context
-    const WORKSPACE_ROOT = 'c:\\PROJECTS\\localweaver';
 
     const handleCreateProject = async () => {
         if (!projectName.trim()) {
             setError('Project name cannot be empty');
             return;
         }
+        if (!parentDir) {
+            setError('Please select a folder location');
+            return;
+        }
 
         setIsLoading(true);
         setError(null);
 
-        const fullPath = `${WORKSPACE_ROOT}\\${projectName.trim()}`;
+        // Normalize path separator
+        const fullPath = `${parentDir.replace(/\\$/, '')}\\${projectName.trim()}`;
 
         try {
             await invoke('create_project_folder', { path: fullPath });
             // Create a default index.html to make it useful
             try {
-                // Initialize with a basic index.html so it's not empty
                 await invoke('create_page', { path: fullPath, filename: 'index.html' });
             } catch (e) {
                 console.warn('Failed to create default index.html', e);
@@ -44,18 +46,45 @@ const ProjectSelector = ({ onSelect }: ProjectSelectorProps) => {
         }
     };
 
-    const handleBrowse = async () => {
+    const handleBrowseParent = async () => {
         try {
             const selected = await open({
                 directory: true,
                 multiple: false,
-                defaultPath: WORKSPACE_ROOT,
+                title: "Select Location for New Project"
+            });
+            if (selected && typeof selected === 'string') {
+                setParentDir(selected);
+            }
+        } catch (err) {
+            console.error("Failed to open dialog:", err);
+        }
+    };
+
+    const handleBrowseExisting = async () => {
+        try {
+            const selected = await open({
+                directory: true,
+                multiple: false,
             });
             if (selected && typeof selected === 'string') {
                 onSelect(selected);
             }
         } catch (err) {
             console.error("Failed to open dialog:", err);
+        }
+    };
+
+    const handleOpenExample = async () => {
+        setIsLoading(true);
+        try {
+            const path = await invoke<string>('ensure_example_project');
+            onSelect(path);
+        } catch (err: any) {
+            console.error(err);
+            setError("Failed to load example: " + err.toString());
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -87,15 +116,15 @@ const ProjectSelector = ({ onSelect }: ProjectSelectorProps) => {
                             <div>New Project</div>
                             <div style={{ fontSize: 10, color: '#666', marginTop: 5 }}>(HTML, CSS)</div>
                         </button>
-                        <button onClick={handleBrowse} style={buttonStyle}>
+                        <button onClick={handleBrowseExisting} style={buttonStyle}>
                             <FolderOpen size={32} style={{ marginBottom: 10 }} />
                             <div>Open Existing</div>
-                            <div style={{ fontSize: 10, color: '#666', marginTop: 5 }}>(HTML, CSS / JSX / TSX)</div>
+                            <div style={{ fontSize: 10, color: '#666', marginTop: 5 }}>(HTML, CSS / JSX)</div>
                         </button>
-                        <button onClick={() => onSelect(`${WORKSPACE_ROOT}\\test-site`)} style={buttonStyle}>
+                        <button onClick={handleOpenExample} style={buttonStyle} disabled={isLoading}>
                             <BookOpen size={32} style={{ marginBottom: 10 }} />
-                            <div>Open Example</div>
-                            <div style={{ fontSize: 10, color: '#666', marginTop: 5 }}>(HTML)</div>
+                            <div>{isLoading ? 'Loading...' : 'Open Example'}</div>
+                            <div style={{ fontSize: 10, color: '#666', marginTop: 5 }}>(Ready to Use)</div>
                         </button>
                     </div>
                 )}
@@ -114,12 +143,24 @@ const ProjectSelector = ({ onSelect }: ProjectSelectorProps) => {
                                     border: '1px solid #444', background: '#252525', color: 'white',
                                     fontSize: 16
                                 }}
-                                onKeyDown={(e) => e.key === 'Enter' && handleCreateProject()}
                             />
                         </div>
 
-                        <div style={{ fontSize: 12, color: '#666' }}>
-                            Location: {WORKSPACE_ROOT}\{projectName || '...'}
+                        <div>
+                            <label style={{ display: 'block', fontSize: 12, color: '#888', marginBottom: 5 }}>Location</label>
+                            <div style={{ display: 'flex', gap: 10 }}>
+                                <input
+                                    readOnly
+                                    value={parentDir}
+                                    placeholder="Select a folder..."
+                                    style={{
+                                        flex: 1, padding: '10px 15px', borderRadius: 6,
+                                        border: '1px solid #444', background: '#252525', color: '#aaa',
+                                        fontSize: 14, cursor: 'not-allowed'
+                                    }}
+                                />
+                                <button onClick={handleBrowseParent} style={secondaryButtonStyle}>Browse</button>
+                            </div>
                         </div>
 
                         {error && <div style={{ color: '#ef4444', fontSize: 13 }}>{error}</div>}
@@ -167,6 +208,7 @@ const secondaryButtonStyle: React.CSSProperties = {
     padding: '10px 20px',
     borderRadius: 6,
     cursor: 'pointer',
+    whiteSpace: 'nowrap'
 };
 
 export default ProjectSelector;

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import grapesjs from 'grapesjs';
 import 'grapesjs/dist/css/grapes.min.css';
 import { invoke } from '@tauri-apps/api/core';
@@ -77,13 +77,57 @@ export default function VisualBuilder({ projectPath }: VisualBuilderProps) {
 
         editorInstance.current = editor;
 
+        // LOAD PROJECT CSS (to fix missing styles)
+        const loadProjectCss = async () => {
+            try {
+                const cssContent = await invoke<string>('read_page_content', {
+                    path: projectPath,
+                    filename: 'src/index.css'
+                });
+
+                // Inject into Canvas via standard DOM manipulation
+                // This is more reliable than addComponents for global styles
+                const iframe = editor.Canvas.getFrameEl();
+                if (!iframe || !iframe.contentWindow) return;
+
+                const doc = iframe.contentWindow.document;
+                const head = doc.head;
+
+                // 1. Inject Project CSS
+                const style = doc.createElement('style');
+                style.id = 'project-css';
+                style.innerHTML = cssContent;
+                head.appendChild(style);
+
+                // 2. Inject Fixes for Editor Compatibility
+                // The user's index.css has 'span { display: block }' which is destructive for rich text editing.
+                // We must override this with high specificity.
+                const fixStyle = doc.createElement('style');
+                fixStyle.id = 'editor-fixes';
+                fixStyle.innerHTML = `
+                    span, b, strong, i, em, mark, small, del, ins, sub, sup { 
+                        display: inline !important; 
+                        line-height: inherit !important;
+                    }
+                `;
+                head.appendChild(fixStyle);
+
+                console.log("Project CSS loaded into Canvas");
+            } catch (e) {
+                console.warn("Could not load project CSS:", e);
+            }
+        };
+
+        // Wait for editor to load fully
+        editor.on('load', loadProjectCss);
+
         return () => {
             if (editorInstance.current) {
                 editorInstance.current.destroy();
                 editorInstance.current = null;
             }
         };
-    }, []);
+    }, [projectPath]);
 
     const handleSave = async () => {
         if (!editorInstance.current) return;

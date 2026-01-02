@@ -1,6 +1,8 @@
+
 import { useEffect, useState } from 'react';
 import { Editor } from 'grapesjs';
-import { X, Zap, MousePointer, Trash2 } from 'lucide-react';
+import { MousePointer, Trash2 } from 'lucide-react';
+import DraggableWindow from './DraggableWindow';
 
 interface InteractionManagerProps {
     editor: Editor;
@@ -16,19 +18,19 @@ export interface Interaction {
 }
 
 const ANIMATION_PRESETS = [
-    { name: 'Bounce', code: `e.target.animate([{ transform: 'translateY(0)' }, { transform: 'translateY(-$INTENSITYpx)' }, { transform: 'translateY(0)' }], { duration: $DURATION, easing: 'ease-in-out' });` },
-    { name: 'Shake', code: `e.target.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-$INTENSITYpx)' }, { transform: 'translateX($INTENSITYpx)' }, { transform: 'translateX(0)' }], { duration: $DURATION });` },
-    { name: 'Pulse', code: `e.target.animate([{ transform: 'scale(1)' }, { transform: 'scale($j_scale)' }, { transform: 'scale(1)' }], { duration: $DURATION });` },
-    { name: 'Levitate (Loop)', code: `e.target.animate([{ transform: 'translateY(0)' }, { transform: 'translateY(-$INTENSITYpx)' }, { transform: 'translateY(0)' }], { duration: $DURATION, iterations: Infinity, easing: 'ease-in-out' });` },
-    { name: 'Magnify (Hover)', code: `e.target.style.transition = 'transform $DURATIONms ease'; e.target.style.transform = 'scale($j_scale)';` },
-    { name: 'Reset Scale (MouseOut)', code: `e.target.style.transform = 'scale(1)';` },
+    { name: 'Bounce', code: `e.target.animate([{ transform: 'translateY(0)' }, { transform: 'translateY(-$INTENSITYpx)' }, { transform: 'translateY(0)' }], { duration: $DURATION, easing: 'ease-in-out' }); ` },
+    { name: 'Shake', code: `e.target.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-$INTENSITYpx)' }, { transform: 'translateX($INTENSITYpx)' }, { transform: 'translateX(0)' }], { duration: $DURATION }); ` },
+    { name: 'Pulse', code: `e.target.animate([{ transform: 'scale(1)' }, { transform: 'scale($j_scale)' }, { transform: 'scale(1)' }], { duration: $DURATION }); ` },
+    { name: 'Levitate (Loop)', code: `e.target.animate([{ transform: 'translateY(0)' }, { transform: 'translateY(-$INTENSITYpx)' }, { transform: 'translateY(0)' }], { duration: $DURATION, iterations: Infinity, easing: 'ease-in-out' }); ` },
+    { name: 'Magnify (Hover)', code: `e.target.style.transition = 'transform $DURATIONms ease'; e.target.style.transform = 'scale($j_scale)'; ` },
+    { name: 'Reset Scale (MouseOut)', code: `e.target.style.transform = 'scale(1)'; ` },
 ];
 
 const UTILITY_PRESETS = [
-    { name: 'Scroll to Top', code: `window.scrollTo({ top: 0, behavior: 'smooth' });` },
-    { name: 'Toggle Visibility', code: `e.target.style.display = e.target.style.display === 'none' ? 'block' : 'none';` },
-    { name: 'Alert Message', code: `alert('Hello from LocalWeaver!');` },
-    { name: 'Log to Console', code: `console.log('Interaction triggered on:', e.target);` },
+    { name: 'Scroll to Top', code: `window.scrollTo({ top: 0, behavior: 'smooth' }); ` },
+    { name: 'Toggle Visibility', code: `e.target.style.display = e.target.style.display === 'none' ? 'block' : 'none'; ` },
+    { name: 'Alert Message', code: `alert('Hello from LocalWeaver!'); ` },
+    { name: 'Log to Console', code: `console.log('Interaction triggered on:', e.target); ` },
 ];
 
 export default function InteractionManager({ editor, onClose }: InteractionManagerProps) {
@@ -115,39 +117,22 @@ export default function InteractionManager({ editor, onClose }: InteractionManag
 
     if (!selectedComponent) {
         return (
-            <div style={{
-                position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-                width: 500, padding: 30,
-                background: '#1e1e1e', color: 'white', borderRadius: 8,
-                boxShadow: '0 10px 40px rgba(0,0,0,0.5)', zIndex: 9999,
-                display: 'flex', flexDirection: 'column', alignItems: 'center',
-                border: '1px solid #333'
-            }}>
-                <MousePointer size={48} className="text-gray-500 mb-4" />
-                <h3 className="text-xl font-bold mb-2">No Element Selected</h3>
-                <p className="text-gray-400 text-center mb-6">Select an element on the canvas to add animations or interactions.</p>
-                <button onClick={onClose} className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded text-sm text-white">Close</button>
-            </div>
+            <DraggableWindow title="Interaction Studio" onClose={onClose} initialWidth={500} initialHeight={250}>
+                <div style={{
+                    padding: 30,
+                    display: 'flex', flexDirection: 'column', alignItems: 'center',
+                    height: '100%', justifyContent: 'center'
+                }}>
+                    <MousePointer size={48} className="text-gray-500 mb-4" />
+                    <h3 className="text-xl font-bold mb-2">No Element Selected</h3>
+                    <p className="text-gray-400 text-center mb-6">Select an element on the canvas to add animations or interactions.</p>
+                </div>
+            </DraggableWindow>
         );
     }
 
     return (
-        <div style={{
-            position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-            width: 500, height: 650,
-            background: '#1e1e1e', color: '#fff',
-            borderRadius: 8, boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
-            border: '1px solid #333',
-            display: 'flex', flexDirection: 'column',
-            zIndex: 9999
-        }}>
-            {/* Header */}
-            <div style={{ padding: '15px 20px', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ margin: 0, fontSize: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Zap size={16} className="text-yellow-500 fill-current" /> Interaction Studio
-                </h3>
-                <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#aaa', cursor: 'pointer' }}><X size={18} /></button>
-            </div>
+        <DraggableWindow title="Interaction Studio" onClose={onClose} initialWidth={500} initialHeight={650}>
 
             {/* Tabs */}
             <div style={{ display: 'flex', borderBottom: '1px solid #333' }}>
@@ -300,7 +285,7 @@ export default function InteractionManager({ editor, onClose }: InteractionManag
                 <span>Selected: {selectedComponent.get('tagName')}</span>
                 <span>Auto-Save Enabled</span>
             </div>
-        </div>
+        </DraggableWindow>
     );
 }
 

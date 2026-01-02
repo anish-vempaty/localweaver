@@ -400,6 +400,34 @@ fn update_component_props(
     Ok(())
 }
 
+#[tauri::command]
+fn ensure_example_project() -> Result<String, String> {
+    let exe_path = std::env::current_exe().map_err(|e| e.to_string())?;
+    let exe_dir = exe_path.parent().unwrap_or(Path::new("."));
+    let project_path = exe_dir.join("localweaver-example");
+    let project_path_str = project_path.to_string_lossy().to_string();
+
+    if !project_path.exists() {
+        fs::create_dir_all(&project_path).map_err(|e| e.to_string())?;
+    }
+
+    let index_path = project_path.join("index.html");
+    if !index_path.exists() {
+        // Use create_dir_all relative to cargo manifest dir if needed, but include_str embeds at compile time
+        // so we just write the string content.
+        let content = include_str!("../assets/example_index.html");
+        fs::write(index_path, content).map_err(|e| e.to_string())?;
+    }
+
+    let about_path = project_path.join("about.html");
+    if !about_path.exists() {
+        let content = include_str!("../assets/example_about.html");
+        fs::write(about_path, content).map_err(|e| e.to_string())?;
+    }
+
+    Ok(project_path_str)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -416,7 +444,8 @@ pub fn run() {
             kill_process,
             create_project_folder,
             get_component_tree,
-            update_component_props
+            update_component_props,
+            ensure_example_project
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

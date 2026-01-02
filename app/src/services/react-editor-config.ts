@@ -35,7 +35,7 @@ export const reactEditorConfig = (editor: Editor) => {
 
 export const serializeToJSX = (editor: Editor): string => {
     const html = editor.getHtml();
-    const css = editor.getCss(); // minimal use
+    // const css = editor.getCss(); // minimal use
 
     // Quick regex replacer for common JSX diffs
     // 1. class -> className
@@ -125,7 +125,7 @@ export const parseJSXToHtml = (code: string): string => {
         // style={{ ... }} -> style="..."
         // This is tricky regex. We'll try to find `style = {{ ` and the closing ` }}`.
         // A simple regex approach for *simple* styles (single line or well formatted):
-        html = html.replace(/style=\{\{([\s\S]*?)\}\}/g, (match, inner) => {
+        html = html.replace(/style=\{\{([\s\S]*?)\}\}/g, (_, inner) => {
             // inner might be "color: 'red', fontSize: '12px'"
             // We need to parse this loosely
             const props = inner.split(',').map((p: string) => p.trim()).filter((p: string) => p);

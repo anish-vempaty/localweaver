@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect } from 'react';
 import ReactFlow, {
     Node,
     Edge,
@@ -118,7 +118,7 @@ export default function GraphEditor({ projectPath, onNodeSelect, initialGraphDat
             // Small delay to ensure FS write completes/propagates?
             await new Promise(r => setTimeout(r, 100));
             await invoke('create_page', { path: projectPath, filename: name });
-            loadGraph();
+            onRefresh();
         } catch (err) {
             alert("Error creating page: " + err);
         }

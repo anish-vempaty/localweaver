@@ -1,6 +1,8 @@
+
 import { useEffect, useState } from 'react';
 import { Editor } from 'grapesjs';
-import { X, Check } from 'lucide-react';
+import { Check } from 'lucide-react';
+import DraggableWindow from './DraggableWindow';
 
 interface TailwindPaletteProps {
     editor: Editor | null;
@@ -41,11 +43,43 @@ export default function TailwindPalette({ editor, onClose }: TailwindPaletteProp
         if (!selected) return;
 
         const finalClass = modifier + cls;
+        const isAdding = !selectedClasses.includes(finalClass);
 
-        if (selectedClasses.includes(finalClass)) {
-            selected.removeClass(finalClass);
-        } else {
+        if (isAdding) {
             selected.addClass(finalClass);
+
+            // --- Smart Dependency Injection ---
+            // If adding a transform-related class, ensure 'transform' exists.
+            // If using a modifier (hover/focus), also ensure a transition exists.
+
+            const isTransform = cls.startsWith('scale') || cls.startsWith('rotate') || cls.startsWith('translate') || cls.startsWith('skew');
+
+            if (isTransform) {
+                // 1. Ensure base 'transform' class is present
+                const currentClasses = selected.getClasses();
+                if (!currentClasses.includes('transform')) {
+                    selected.addClass('transform');
+                }
+
+                // 2. If hovering/focusing, ensure transition
+                // We prefer 'transition-transform' for performance, or generic 'transition'
+                if (modifier) {
+                    const hasTransition = currentClasses.some((c: string) => c.startsWith('transition'));
+                    if (!hasTransition) {
+                        selected.addClass('transition-transform');
+                        // Also good default duration/ease?
+                        // Let's not be too aggressive, but transition-transform usually implies a default duration in standard tailwind (none), 
+                        // actually standard tailwind 'transition' sets all. 'transition-transform' sets property. 
+                        // It needs a duration. Default is usually 150ms if not specified? 
+                        // Actually explicit duration is better. 
+                        // Let's just add 'duration-300' if no duration exists.
+                        const hasDuration = currentClasses.some((c: string) => c.startsWith('duration-'));
+                        if (!hasDuration) selected.addClass('duration-300');
+                    }
+                }
+            }
+        } else {
+            selected.removeClass(finalClass);
         }
         setSelectedClasses(selected.getClasses());
     };
@@ -53,20 +87,8 @@ export default function TailwindPalette({ editor, onClose }: TailwindPaletteProp
     if (!editor) return null;
 
     return (
-        <div style={{
-            position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-            width: 500, height: 600,
-            background: '#1e1e1e', color: '#fff',
-            borderRadius: 8, boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
-            border: '1px solid #333',
-            display: 'flex', flexDirection: 'column',
-            zIndex: 9999
-        }}>
-            {/* Header */}
-            <div style={{ padding: '15px 20px', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ margin: 0, fontSize: 16 }}>Tailwind Assistant</h3>
-                <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#aaa', cursor: 'pointer' }}><X size={18} /></button>
-            </div>
+        <DraggableWindow title="Tailwind Assistant" onClose={onClose} initialWidth={500} initialHeight={600}>
+            {/* Modifier Toggles (Hover/Focus) */}
 
             {/* Modifier Toggles (Hover/Focus) */}
             <div style={{ padding: '10px 20px', background: '#252525', borderBottom: '1px solid #333', display: 'flex', gap: 10, alignItems: 'center' }}>
@@ -151,7 +173,7 @@ export default function TailwindPalette({ editor, onClose }: TailwindPaletteProp
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8 }}>
                                     {intensities.map(i => {
                                         let prefix = colorMode === 'bg' ? 'bg' : colorMode === 'text' ? 'text' : colorMode === 'border' ? 'border' : colorMode;
-                                        const cls = `${prefix}-${selectedColorFamily}-${i}`;
+                                        const cls = `${prefix} -${selectedColorFamily} -${i} `;
                                         const isActive = selectedClasses.includes(modifier + cls);
                                         return (
                                             <div key={i} onClick={() => toggleClass(cls)}
@@ -307,8 +329,9 @@ export default function TailwindPalette({ editor, onClose }: TailwindPaletteProp
                     </div>
                 )}
 
+                {/* Content ... */}
             </div>
-        </div >
+        </DraggableWindow>
     );
 }
 
