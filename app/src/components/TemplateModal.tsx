@@ -1,16 +1,26 @@
 import { useState, useMemo } from 'react';
-import { templates, Template } from '../templates';
+import { templates } from '../templates';
+import { invoke } from '@tauri-apps/api/core';
+import { generateContent } from '../services/ai';
 
 interface TemplateModalProps {
     isOpen: boolean;
     onClose: () => void;
     onCreate: (filename: string, content: string) => void;
+    existingFiles?: string[];
+    projectPath?: string;
 }
 
-export default function TemplateModal({ isOpen, onClose, onCreate }: TemplateModalProps) {
+export default function TemplateModal({ isOpen, onClose, onCreate, existingFiles = [], projectPath = "" }: TemplateModalProps) {
+    const [mode, setMode] = useState<'presets' | 'ai'>('presets');
     const [selectedTemplateId, setSelectedTemplateId] = useState<string>('blank');
     const [fileName, setFileName] = useState('');
     const [filter, setFilter] = useState('All');
+
+    // AI State
+    const [aiPrompt, setAiPrompt] = useState('');
+    const [aiContextFile, setAiContextFile] = useState('');
+    const [isGenerating, setIsGenerating] = useState(false);
 
     const categories = ['All', ...Array.from(new Set(templates.map(t => t.category)))];
 
@@ -20,17 +30,50 @@ export default function TemplateModal({ isOpen, onClose, onCreate }: TemplateMod
     }, [filter]);
 
 
-
     if (!isOpen) return null;
 
-    const handleCreate = () => {
+    const handleCreate = async () => {
         if (!fileName.trim()) return;
-        const template = templates.find(t => t.id === selectedTemplateId);
-        if (template) {
-            // Ensure filename has extension
-            let finalName = fileName.trim();
-            if (!finalName.endsWith('.html')) finalName += '.html';
-            onCreate(finalName, template.content);
+
+        // Ensure filename has extension
+        let finalName = fileName.trim();
+        if (!finalName.endsWith('.html')) finalName += '.html';
+
+        if (mode === 'presets') {
+            const template = templates.find(t => t.id === selectedTemplateId);
+            if (template) {
+                onCreate(finalName, template.content);
+            }
+        } else {
+            // AI Mode
+            if (!aiPrompt.trim()) return;
+
+            setIsGenerating(true);
+            try {
+                let context = "";
+                if (aiContextFile && projectPath) {
+                    try {
+                        context = await invoke('read_page_content', { path: projectPath, filename: aiContextFile });
+                    } catch (err) {
+                        console.error("Failed to read context file:", err);
+                        // Continue without context or alert? Let's continue but warn
+                    }
+                }
+
+                // If context is provided, we use Type 2 (Context Aware), otherwise Type 1
+                // We ask for a full page since this is "Create New Page"
+                const fullPrompt = context
+                    ? `Create a FULL HTML page based on the following request: "${aiPrompt}".\nCoordinate the style and structure with the provided existing page code.`
+                    : `Create a FULL HTML page based on the following request: "${aiPrompt}". Include all necessary tags (html, head, body).`;
+
+                const generatedHtml = await generateContent(fullPrompt, context, true);
+
+                onCreate(finalName, generatedHtml);
+            } catch (error) {
+                alert("Failed to generate template: " + error);
+            } finally {
+                setIsGenerating(false);
+            }
         }
     };
 
@@ -57,75 +100,180 @@ export default function TemplateModal({ isOpen, onClose, onCreate }: TemplateMod
             }}>
                 {/* Header */}
                 <div style={{ padding: '20px 24px', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <h2 style={{ margin: 0, color: 'white', fontSize: 20 }}>Create New Page</h2>
+                    <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
+                        <h2 style={{ margin: 0, color: 'white', fontSize: 20 }}>Create New Page</h2>
+                        {/* Tabs */}
+                        <div style={{ display: 'flex', background: '#333', borderRadius: 6, padding: 2 }}>
+                            <button
+                                onClick={() => setMode('presets')}
+                                style={{
+                                    background: mode === 'presets' ? '#3b82f6' : 'transparent',
+                                    color: mode === 'presets' ? 'white' : '#aaa',
+                                    border: 'none',
+                                    padding: '6px 12px',
+                                    borderRadius: 4,
+                                    cursor: 'pointer',
+                                    fontSize: 14,
+                                    fontWeight: '500'
+                                }}
+                            >
+                                Presets
+                            </button>
+                            <button
+                                onClick={() => setMode('ai')}
+                                style={{
+                                    background: mode === 'ai' ? '#8b5cf6' : 'transparent',
+                                    color: mode === 'ai' ? 'white' : '#aaa',
+                                    border: 'none',
+                                    padding: '6px 12px',
+                                    borderRadius: 4,
+                                    cursor: 'pointer',
+                                    fontSize: 14,
+                                    fontWeight: '500',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 6
+                                }}
+                            >
+                                <i className="fa-solid fa-wand-magic-sparkles"></i>
+                                AI Generator
+                            </button>
+                        </div>
+                    </div>
                     <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: 24 }}>&times;</button>
                 </div>
 
                 {/* Body */}
-                <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-                    {/* Sidebar / Filters */}
-                    <div style={{ width: 200, background: '#252525', padding: 20, borderRight: '1px solid #333' }}>
-                        <h3 style={{ color: '#888', textTransform: 'uppercase', fontSize: 12, marginBottom: 10 }}>Categories</h3>
-                        {categories.map(cat => (
-                            <div
-                                key={cat}
-                                onClick={() => setFilter(cat)}
-                                style={{
-                                    padding: '8px 12px',
-                                    borderRadius: 6,
-                                    cursor: 'pointer',
-                                    color: filter === cat ? 'white' : '#aaa',
-                                    background: filter === cat ? '#3b82f6' : 'transparent',
-                                    marginBottom: 4,
-                                    fontSize: 14
-                                }}
-                            >
-                                {cat}
+                <div style={{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 400 }}>
+                    {mode === 'presets' ? (
+                        <>
+                            {/* Sidebar / Filters */}
+                            <div style={{ width: 200, background: '#252525', padding: 20, borderRight: '1px solid #333' }}>
+                                <h3 style={{ color: '#888', textTransform: 'uppercase', fontSize: 12, marginBottom: 10 }}>Categories</h3>
+                                {categories.map(cat => (
+                                    <div
+                                        key={cat}
+                                        onClick={() => setFilter(cat)}
+                                        style={{
+                                            padding: '8px 12px',
+                                            borderRadius: 6,
+                                            cursor: 'pointer',
+                                            color: filter === cat ? 'white' : '#aaa',
+                                            background: filter === cat ? '#3b82f6' : 'transparent',
+                                            marginBottom: 4,
+                                            fontSize: 14
+                                        }}
+                                    >
+                                        {cat}
+                                    </div>
+                                ))}
                             </div>
-                        ))}
-                    </div>
 
-                    {/* Grid */}
-                    <div style={{ flex: 1, padding: 24, overflowY: 'auto' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 20 }}>
-                            {filteredTemplates.map(template => (
-                                <div
-                                    key={template.id}
-                                    onClick={() => setSelectedTemplateId(template.id)}
+                            {/* Grid */}
+                            <div style={{ flex: 1, padding: 24, overflowY: 'auto' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 20 }}>
+                                    {filteredTemplates.map(template => (
+                                        <div
+                                            key={template.id}
+                                            onClick={() => setSelectedTemplateId(template.id)}
+                                            style={{
+                                                border: `2px solid ${selectedTemplateId === template.id ? '#3b82f6' : '#444'}`,
+                                                borderRadius: 8,
+                                                overflow: 'hidden',
+                                                cursor: 'pointer',
+                                                background: '#2a2a2a',
+                                                transition: 'all 0.2s'
+                                            }}
+                                        >
+                                            {/* Thumbnail */}
+                                            <div style={{
+                                                height: 120,
+                                                background: template.thumbnail.bg,
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                color: 'white',
+                                                fontSize: 40,
+                                                textShadow: '0 2px 10px rgba(0,0,0,0.2)'
+                                            }}>
+                                                {template.thumbnail.type === 'icon' ? (
+                                                    <i className={`fa-solid ${template.thumbnail.value}`} style={{ fontFamily: '"Font Awesome 6 Free", FontAwesome, sans-serif' }}></i>
+                                                ) : null}
+                                            </div>
+                                            <div style={{ padding: 12 }}>
+                                                <div style={{ color: 'white', fontWeight: 'bold', marginBottom: 4 }}>{template.name}</div>
+                                                <div style={{ color: '#888', fontSize: 12, lineHeight: 1.4 }}>{template.description}</div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </>
+                    ) : (
+                        /* AI Mode UI */
+                        <div style={{ flex: 1, padding: 40, display: 'flex', flexDirection: 'column', gap: 24, background: '#252525', overflowY: 'auto' }}>
+                            <div style={{ textAlign: 'center', marginBottom: 20 }}>
+                                <div style={{
+                                    width: 60, height: 60, borderRadius: '50%', background: 'linear-gradient(135deg, #8b5cf6, #3b82f6)',
+                                    margin: '0 auto 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, color: 'white'
+                                }}>
+                                    <i className="fa-solid fa-wand-magic-sparkles"></i>
+                                </div>
+                                <h3 style={{ color: 'white', fontSize: 24, margin: '0 0 8px' }}>Generate with AI</h3>
+                                <p style={{ color: '#aaa', margin: 0 }}>Describe the page you want, and let the local AI build it for you.</p>
+                            </div>
+
+                            {/* Prompt Input */}
+                            <div>
+                                <label style={{ display: 'block', color: '#ccc', marginBottom: 8, fontSize: 14 }}>Prompt</label>
+                                <textarea
+                                    value={aiPrompt}
+                                    onChange={(e) => setAiPrompt(e.target.value)}
+                                    placeholder="e.g. A modern landing page for a coffee shop with a hero section, 3 feature cards, and a newsletter signup form."
                                     style={{
-                                        border: `2px solid ${selectedTemplateId === template.id ? '#3b82f6' : '#444'}`,
+                                        width: '100%',
+                                        height: 120,
+                                        background: '#333',
+                                        border: '1px solid #444',
                                         borderRadius: 8,
-                                        overflow: 'hidden',
-                                        cursor: 'pointer',
-                                        background: '#2a2a2a',
-                                        transition: 'all 0.2s'
+                                        color: 'white',
+                                        padding: 16,
+                                        resize: 'none',
+                                        fontSize: 16,
+                                        outline: 'none',
+                                        fontFamily: 'inherit'
+                                    }}
+                                />
+                            </div>
+
+                            {/* Context Selector */}
+                            <div>
+                                <label style={{ display: 'block', color: '#ccc', marginBottom: 8, fontSize: 14 }}>
+                                    Context Reference (Optional)
+                                    <span style={{ marginLeft: 8, fontSize: 12, color: '#666' }}>Select an existing file to match style</span>
+                                </label>
+                                <select
+                                    value={aiContextFile}
+                                    onChange={(e) => setAiContextFile(e.target.value)}
+                                    style={{
+                                        width: '100%',
+                                        background: '#333',
+                                        border: '1px solid #444',
+                                        borderRadius: 8,
+                                        color: 'white',
+                                        padding: '12px 16px',
+                                        outline: 'none',
+                                        fontSize: 14
                                     }}
                                 >
-                                    {/* Thumbnail */}
-                                    <div style={{
-                                        height: 120,
-                                        background: template.thumbnail.bg,
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        color: 'white',
-                                        fontSize: 40,
-                                        textShadow: '0 2px 10px rgba(0,0,0,0.2)'
-                                    }}>
-                                        {template.thumbnail.type === 'icon' ? (
-                                            // We just use a class string, assuming font awesome is loaded globally in the app or we render it simpler
-                                            // Since this is react, let's try to render an <i> if we can, or just text
-                                            <i className={`fa-solid ${template.thumbnail.value}`} style={{ fontFamily: '"Font Awesome 6 Free", FontAwesome, sans-serif' }}></i>
-                                        ) : null}
-                                    </div>
-                                    <div style={{ padding: 12 }}>
-                                        <div style={{ color: 'white', fontWeight: 'bold', marginBottom: 4 }}>{template.name}</div>
-                                        <div style={{ color: '#888', fontSize: 12, lineHeight: 1.4 }}>{template.description}</div>
-                                    </div>
-                                </div>
-                            ))}
+                                    <option value="">-- No Context (Fresh Generation) --</option>
+                                    {existingFiles.filter(f => f.endsWith('.html')).map(f => (
+                                        <option key={f} value={f}>{f}</option>
+                                    ))}
+                                </select>
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </div>
 
                 {/* Footer */}
@@ -156,18 +304,28 @@ export default function TemplateModal({ isOpen, onClose, onCreate }: TemplateMod
                     </button>
                     <button
                         onClick={handleCreate}
-                        disabled={!fileName.trim()}
+                        disabled={!fileName.trim() || (mode === 'ai' && (!aiPrompt.trim() || isGenerating))}
                         style={{
                             padding: '10px 24px',
                             borderRadius: 6,
                             border: 'none',
-                            background: fileName.trim() ? '#3b82f6' : '#555',
+                            background: fileName.trim() && (mode !== 'ai' || aiPrompt.trim()) ? (mode === 'ai' ? '#8b5cf6' : '#3b82f6') : '#555',
                             color: 'white',
                             fontWeight: 'bold',
-                            cursor: fileName.trim() ? 'pointer' : 'not-allowed'
+                            cursor: fileName.trim() && (mode !== 'ai' || aiPrompt.trim()) && !isGenerating ? 'pointer' : 'not-allowed',
+                            opacity: isGenerating ? 0.7 : 1,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 8
                         }}
                     >
-                        Create Page
+                        {isGenerating ? (
+                            <>
+                                <i className="fa-solid fa-spinner fa-spin"></i> Generating...
+                            </>
+                        ) : (
+                            mode === 'ai' ? 'Generate Page' : 'Create Page'
+                        )}
                     </button>
                 </div>
             </div>

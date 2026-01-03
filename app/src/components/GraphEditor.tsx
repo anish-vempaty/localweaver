@@ -149,6 +149,8 @@ export default function GraphEditor({ projectPath, onNodeSelect, initialGraphDat
                 isOpen={isModalOpen}
                 onClose={() => setIsModalOpen(false)}
                 onCreate={handleCreatePage}
+                existingFiles={nodes.map(n => n.id)} // Pass existing files for AI context
+                projectPath={projectPath}
             />
         </div>
     );
